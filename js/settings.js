@@ -2,7 +2,6 @@
 import { h, clear, plural } from './util.js';
 import * as S from './store.js';
 import { openSheet, actionSheet, group, groupTitle, groupNote, row, toggle, seg, selectInput, toast, ic } from './ui.js';
-import { loadDemo } from './demo.js';
 import * as Sync from './sync.js';
 import * as Push from './push.js';
 
@@ -89,7 +88,6 @@ export function openSettings() {
           group(
             h('button', { class: 'row-btn', onclick: exportData }, 'Экспорт резервной копии'),
             h('button', { class: 'row-btn', onclick: () => importData(api) }, 'Импорт из копии'),
-            h('button', { class: 'row-btn', onclick: () => { loadDemo(); toast('Примеры добавлены'); api.close(); } }, 'Добавить примеры данных'),
             h('button', { class: 'row-btn danger', onclick: () => actionSheet({ title: 'Удалить все данные?', message: 'Цели, задачи, события и привычки будут удалены на этом устройстве и на остальных после синхронизации.', actions: [{ label: 'Удалить всё', danger: true, onClick: () => { S.resetAll(); toast('Данные удалены'); } }] }) }, 'Удалить все данные')),
           h('div', { class: 'about' }, h('b', null, 'Ритм'), h('span', null, 'Цели, задачи, привычки и календарь в одном месте')),
           h('div', { class: 'sheet-pad' }));
