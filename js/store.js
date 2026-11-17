@@ -300,6 +300,19 @@ export function switchAccount(userId = null) {
   return { userId: userId || null };
 }
 
+
+/** Удаляет локальные данные и резервные копии удалённого аккаунта на этом устройстве. */
+export function clearAccountStorage(userId) {
+  if (!userId) return;
+  flush();
+  const prefix = `${KEY}.account.${userId}`;
+  const backupPrefix = `${KEY}.backup.${userId}.`;
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (key === prefix || key === `${KEY}.merged.${userId}` || key.startsWith(backupPrefix)) localStorage.removeItem(key);
+  }
+}
+
 /**
  * Однократно объединить гостевые данные с текущим аккаунтом.
  * Сначала сохраняется полный backup обоих хранилищ; при ошибке backup объединение не выполняется.
