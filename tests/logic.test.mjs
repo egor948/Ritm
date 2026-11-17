@@ -187,7 +187,7 @@ test('раскладка пересекающихся блоков по коло
   assert.equal(l.get('d').cols, 1);
 });
 
-test('напоминания: события, задачи, привычки', () => {
+test('push-напоминания: только события и задачи', () => {
   const now = new Date(2026, 10, 15, 12, 0, 0);
   const data = {
     events: [
@@ -212,13 +212,19 @@ test('напоминания: события, задачи, привычки', (
   assert.ok(ids.includes('tk:t1'));
   assert.ok(ids.includes('tk:t2'));
   assert.ok(!ids.includes('tk:t3'));
-  assert.ok(!ids.includes('hb:h1:2026-11-15')); // выполнена сегодня
-  assert.ok(ids.includes('hb:h1:2026-11-16'));
+  assert.ok(!ids.some((i) => i.startsWith('hb:'))); // привычки не отправляются в push
   // 15:00 минус 30 мин = 14:30 по локальному времени
   const e1 = r.find((x) => x.id === 'ev:e1:2026-11-15');
   assert.equal(new Date(e1.fireAt).getTime(), new Date(2026, 10, 15, 14, 30).getTime());
   // отсортировано по времени
   assert.deepEqual([...r].map((x) => x.fireAt), [...r].map((x) => x.fireAt).sort());
+
+  const onlyTasks = L.buildReminders({ ...data, settings: { notifyEvents: false, notifyTasks: true } }, idx, now, 3);
+  assert.ok(onlyTasks.every((x) => x.id.startsWith('tk:')));
+  const onlyEvents = L.buildReminders({ ...data, settings: { notifyEvents: true, notifyTasks: false } }, idx, now, 3);
+  assert.ok(onlyEvents.every((x) => x.id.startsWith('ev:')));
+  const none = L.buildReminders({ ...data, settings: { notifyEvents: false, notifyTasks: false } }, idx, now, 3);
+  assert.equal(none.length, 0);
 });
 
 test('оценка дня', () => {
