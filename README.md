@@ -41,18 +41,24 @@ PWA не может создавать виджеты на главном экр
 
 1. **Проект.** Создайте проект на supabase.com. В Project Settings → API скопируйте `Project URL` и `anon public` ключ.
 2. **База.** SQL Editor → вставьте содержимое `supabase/schema.sql` и выполните.
-3. **Вход по email.** Authentication → Providers → Email. Если не хотите подтверждать почту, отключите «Confirm email».
-4. **Ключи для push.** Выполните на компьютере (нужен Node.js): `npx web-push generate-vapid-keys`. Получите публичный и приватный ключи.
-5. **Конфиг приложения.** Откройте `config.js` и впишите `SUPABASE_URL`, `SUPABASE_ANON_KEY` и публичный `VAPID_PUBLIC_KEY`. Загрузите обновлённые файлы на хостинг.
-6. **Функция отправки.** Установите [Supabase CLI](https://supabase.com/docs/guides/cli), затем:
+3. **Провайдеры входа.** Authentication → Sign In / Providers:
+   - включите Email (при желании отключите Confirm email);
+   - включите Google и укажите OAuth Client ID и Client Secret из Google Cloud.
+4. **URL авторизации.** Authentication → URL Configuration:
+   - Site URL: `https://egor948.github.io/Ritm/`;
+   - Redirect URLs: добавьте `https://egor948.github.io/Ritm/`.
+   В Google Cloud в Authorized redirect URIs укажите callback Supabase: `https://buwdepheklyrrzofkinm.supabase.co/auth/v1/callback`.
+5. **Ключи для push.** Выполните на компьютере (нужен Node.js): `npx web-push generate-vapid-keys`. Получите публичный и приватный ключи.
+6. **Конфиг приложения.** Откройте `config.js` и впишите `SUPABASE_URL`, `SUPABASE_ANON_KEY` и публичный `VAPID_PUBLIC_KEY`. Загрузите обновлённые файлы на хостинг.
+7. **Функция отправки.** Установите [Supabase CLI](https://supabase.com/docs/guides/cli), затем:
    ```
    supabase login
    supabase link --project-ref ВАШ_PROJECT_REF
    supabase secrets set VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:ваш@email CRON_SECRET=придумайте_длинную_строку
    supabase functions deploy send-reminders --no-verify-jwt
    ```
-7. **Запуск раз в минуту.** Database → Extensions → включите `pg_cron` и `pg_net`. Затем в SQL Editor выполните блок `cron.schedule(...)` из конца `schema.sql`, подставив свой `PROJECT_REF` и `CRON_SECRET`.
-8. **В приложении.** Настройки → «Войти или создать аккаунт», затем «Включить напоминания». На втором устройстве войдите в тот же аккаунт.
+8. **Запуск раз в минуту.** Database → Extensions → включите `pg_cron` и `pg_net`. Затем в SQL Editor выполните блок `cron.schedule(...)` из конца `schema.sql`, подставив свой `PROJECT_REF` и `CRON_SECRET`.
+9. **В приложении.** Настройки → «Войти или создать аккаунт» → «Продолжить с Google» или вход по email. После возврата из Google Ritm автоматически завершит вход и синхронизирует данные. Для push нажмите «Включить напоминания». На втором устройстве войдите в тот же аккаунт.
 
 Как работает синхронизация: данные хранятся на устройстве, правки отправляются в облако через пару секунд, при возвращении в приложение подтягиваются чужие. Если одну запись изменили на двух устройствах, побеждает более свежая правка. Удаления синхронизируются тоже.
 
