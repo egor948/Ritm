@@ -26,6 +26,8 @@ const defaultSettings = () => ({
   calFilters: { events: true, tasks: true, habits: true, goals: true },
   widgets: DEFAULT_WIDGETS.map((w) => ({ ...w })),
   defaultRemindAt: '09:00',
+  notifyTasks: true,
+  notifyEvents: true,
   onboarded: false,
   updatedAt: 0,
 });
