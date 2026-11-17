@@ -623,3 +623,15 @@ small { font-size: 12px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+
+/* Поле пароля с деликатным переключателем видимости в стиле Apple */
+.password-row { display: flex; align-items: center; gap: 10px; }
+.password-row .inp { flex: 1; min-width: 0; }
+.password-eye {
+  display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 36px;
+  border-radius: 10px; color: var(--label-2); background: var(--fill);
+  transition: background .18s ease, color .18s ease, transform .18s ease;
+}
+.password-eye:active { transform: scale(.92); background: var(--fill); }
+.password-eye svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
