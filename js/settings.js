@@ -134,6 +134,12 @@ function openSignIn(done) {
           } catch (e) { msg.textContent = e.message || 'Не удалось войти'; }
         } });
         api.body.append(
+          h('button', { class: 'row-btn', onclick: async () => {
+            msg.textContent = '';
+            try { await Sync.startGoogleOAuth(); }
+            catch (e) { msg.textContent = e.message || 'Не удалось открыть Google'; }
+          } }, 'Продолжить с Google'),
+          groupNote('Или войдите по email и паролю'),
           group(
             h('div', { class: 'row solo' }, h('input', { class: 'inp', type: 'email', placeholder: 'Email', autocomplete: 'email', value: email, oninput: (e) => (email = e.target.value.trim()) })),
             h('div', { class: 'row solo' }, h('input', { class: 'inp', type: 'password', placeholder: 'Пароль', autocomplete: mode === 'in' ? 'current-password' : 'new-password', value: pass, oninput: (e) => (pass = e.target.value) }))),
