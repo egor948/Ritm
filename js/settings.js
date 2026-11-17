@@ -156,7 +156,7 @@ function openSignIn(done) {
               } },
               h('svg:svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' },
                 h('svg:path', { d: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z' }),
-                h('svg:circle', { cx: 12, cy: 12, r: 3 })))),
+                h('svg:circle', { cx: 12, cy: 12, r: 3 }))))),
           msg,
           h('button', { class: 'link-btn', onclick: () => { mode = mode === 'in' ? 'up' : 'in'; draw(); } }, mode === 'in' ? 'Нет аккаунта? Создать' : 'Уже есть аккаунт? Войти'),
           h('div', { class: 'sheet-pad' }));
