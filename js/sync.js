@@ -136,7 +136,7 @@ async function authCall(path, body) {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const m = json.error_description || json.msg || json.message || json.error || 'Ошибка входа';
-    throw new Error(/invalid login/i.test(m) ? 'Неверный email или пароль' : /already/i.test(m) ? 'Этот email уже зарегистрирован' : /confirm/i.test(m) ? 'Подтвердите email по ссылке из письма' : m);
+    throw new Error(/invalid login/i.test(m) ? 'Неверный email или пароль' : /already/i.test(m) ? 'Этот email уже зарегистрирован' : /confirm/i.test(m) ? 'Подтверждение Email включено в настройках Supabase. Отключите Confirm email для регистрации без письма.' : m);
   }
   return json;
 }
