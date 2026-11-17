@@ -3,6 +3,8 @@ import { uid, ymd } from './util.js';
 import { buildLogIndex, pickNewer } from './logic.js';
 
 const KEY = 'rhythm.v1';
+let storageKey = KEY;
+const accountKey = (userId) => userId ? `${KEY}.account.${userId}` : KEY;
 export const KINDS = ['goals', 'tasks', 'events', 'habits', 'logs'];
 
 export const DEFAULT_WIDGETS = [
@@ -37,9 +39,9 @@ const emptyState = () => ({
   timers: {}, // habitId → время старта (мс), только на устройстве
 });
 
-function load() {
+function load(key = storageKey) {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(key);
     if (raw) {
       const s = JSON.parse(raw);
       const base = emptyState();
@@ -68,7 +70,7 @@ export const subscribe = (fn) => {
 
 function save() {
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    localStorage.setItem(storageKey, JSON.stringify(state));
   } catch (e) {
     console.warn('Не удалось сохранить данные', e);
   }
@@ -286,4 +288,65 @@ export function replaceAllWith(newState) {
   state = { ...emptyState(), ...newState, settings: { ...defaultSettings(), ...(newState.settings || {}) } };
   commit();
 }
+
+/** Переключить локальный профиль. Данные разных аккаунтов хранятся отдельно. */
+export function switchAccount(userId = null) {
+  flush();
+  storageKey = accountKey(userId);
+  state = load(storageKey);
+  snap = null;
+  commit();
+  flush();
+  return { userId: userId || null };
+}
+
+/**
+ * Однократно объединить гостевые данные с текущим аккаунтом.
+ * Сначала сохраняется полный backup обоих хранилищ; при ошибке backup объединение не выполняется.
+ */
+export function mergeGuestIntoCurrent(userId) {
+  if (!userId) throw new Error('Не указан аккаунт для объединения');
+  const marker = `${KEY}.merged.${userId}`;
+  if (localStorage.getItem(marker) === '1') return { merged: false, alreadyDone: true };
+  flush();
+  const guest = load(KEY);
+  const account = state;
+  const backup = {
+    app: 'rhythm-merge-backup',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    userId,
+    guest,
+    account,
+  };
+  // Если backup нельзя сохранить, не начинаем операцию слияния.
+  localStorage.setItem(`${KEY}.backup.${userId}.${Date.now()}`, JSON.stringify(backup));
+
+  let mergedCount = 0;
+  for (const kind of KINDS) {
+    for (const incoming of guest[kind] || []) {
+      const index = account[kind].findIndex((item) => item.id === incoming.id);
+      const current = index >= 0 ? account[kind][index] : null;
+      const winner = pickNewer(current, incoming);
+      if (winner === incoming && winner !== current) {
+        if (index >= 0) account[kind][index] = { ...incoming };
+        else account[kind].push({ ...incoming });
+        account.dirty[`${kind}:${incoming.id}`] = 1;
+        mergedCount++;
+      }
+    }
+  }
+  if ((guest.settings?.updatedAt || 0) > (account.settings?.updatedAt || 0)) {
+    account.settings = { ...defaultSettings(), ...guest.settings };
+    account.dirty['settings:main'] = 1;
+    mergedCount++;
+  }
+  // Таймеры не синхронизируются и не переносятся между профилями.
+  state = account;
+  commit();
+  flush();
+  localStorage.setItem(marker, '1');
+  return { merged: true, count: mergedCount };
+}
+
 export const todayKey = () => ymd(new Date());
