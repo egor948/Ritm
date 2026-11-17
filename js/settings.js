@@ -129,7 +129,6 @@ function openSignIn(done) {
           if (!email.includes('@') || !pass || (mode === 'up' && pass.length < 8)) { msg.textContent = mode === 'up' ? 'Введите корректный email и пароль (не короче 8 символов)' : 'Введите корректный email и пароль'; return; }
           try {
             const res = mode === 'in' ? await Sync.signIn(email, pass) : await Sync.signUp(email, pass);
-            if (res && res.needsConfirm) { msg.textContent = 'Мы отправили письмо — подтвердите адрес и войдите.'; mode = 'in'; return; }
             api.close(true); toast('Синхронизация включена'); done && done();
           } catch (e) { msg.textContent = e.message || 'Не удалось войти'; }
         } });
@@ -192,8 +191,7 @@ function openAccountSheet(onChanged) {
             h('div', { class: 'account-hero' }, avatar,
               h('b', null, p.name || 'Пользователь'),
               h('span', null, p.email || ''),
-              h('small', null, providers || 'Аккаунт Ritm'),
-              h('small', null, p.emailVerified ? 'Email подтверждён' : 'Email не подтверждён')),
+              h('small', null, providers || 'Аккаунт Ritm')),
             groupTitle('Профиль'),
             group(button('Изменить имя', () => editAccountName(p, draw, showError))),
             groupTitle('Безопасность'),
