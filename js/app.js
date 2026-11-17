@@ -9,7 +9,6 @@ import { tasksScreen } from './tasks.js';
 import { goalsScreen } from './goals.js';
 import { habitsScreen, tickTimers } from './habits.js';
 import { applyTheme } from './settings.js';
-import { loadDemo } from './demo.js';
 import * as Sync from './sync.js';
 import * as Push from './push.js';
 import { closeTopLayer, hasLayer } from './layers.js';
@@ -112,8 +111,7 @@ function welcome() {
             feat('calendar', 'red', 'Календарь', 'День, неделя, месяц, год. Задачи — на таймлайн'),
             feat('flame', 'orange', 'Привычки', 'Серии, счётчики, таймер и тепловая карта'),
             feat('bell', 'blue', 'Напоминания', 'Работают на iPhone, в том числе при закрытом приложении')),
-          h('button', { class: 'btn-primary wide', onclick: () => { loadDemo(); api.close(); toast('Загрузили примеры. Их можно удалить в настройках'); } }, 'Посмотреть на примерах'),
-          h('button', { class: 'link-btn', onclick: () => { S.setSettings({ onboarded: true }); api.close(true); } }, 'Начать с чистого листа')));
+          h('button', { class: 'btn-primary wide', onclick: () => { S.setSettings({ onboarded: true }); api.close(true); } }, 'Начать')));
     },
   });
 }
