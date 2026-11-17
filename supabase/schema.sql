@@ -72,17 +72,28 @@ drop policy if exists "own reminders" on public.reminders;
 create policy "own reminders" on public.reminders for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- Приложение присылает актуальный список на ближайшие дни; отправленные не трогаем, чтобы не было повторов.
+-- Приложение пересобирает список на ближайшие дни:
+-- 1) будущие неотправленные напоминания заменяются актуальным расписанием;
+-- 2) уже наступившие неотправленные напоминания сохраняются в очереди до отправки
+--    или закрытия сервером по сроку давности (сейчас 6 часов).
 create or replace function public.replace_reminders(items jsonb) returns void
-language plpgsql security invoker as $$
+language plpgsql security invoker as $
 begin
-  delete from public.reminders where user_id = auth.uid() and sent = false;
-  delete from public.reminders where user_id = auth.uid() and sent = true and fire_at < now() - interval '3 days';
+  delete from public.reminders
+  where user_id = auth.uid()
+    and sent = false
+    and fire_at > now();
+
+  delete from public.reminders
+  where user_id = auth.uid()
+    and sent = true
+    and fire_at < now() - interval '3 days';
+
   insert into public.reminders (user_id, id, fire_at, title, body, tag, url)
   select auth.uid(), x->>'id', (x->>'fireAt')::timestamptz, x->>'title', x->>'body', x->>'tag', x->>'url'
   from jsonb_array_elements(items) x
   on conflict (user_id, id) do nothing;
-end $$;
+end $;
 
 -- ---------------------------------------------------------------- отправка раз в минуту
 -- 1) Включите расширения: Database → Extensions → pg_cron и pg_net.
