@@ -329,10 +329,14 @@ export const REMINDER_OPTIONS = [
  */
 export function buildReminders(data, idx, now = new Date(), horizonDays = 14, defaultTime = '09:00') {
   const out = [];
-  const from = ymd(now);
-  const to = addDays(from, horizonDays);
+  // Держим клиентское расписание в том же окне опоздания, что и сервер (6 часов).
+  // Это позволяет поставить в очередь напоминание, если синхронизация произошла
+  // уже после его времени, но сервер ещё успевает его доставить.
+  const staleBefore = now.getTime() - 6 * 3600 * 1000;
+  const from = ymd(new Date(staleBefore));
+  const to = addDays(ymd(now), horizonDays);
   const push = (id, when, title, body, tag, url) => {
-    if (when.getTime() <= now.getTime() - 60000) return; // в прошлом
+    if (when.getTime() < staleBefore) return; // старше допустимого окна доставки
     out.push({ id, fireAt: when.toISOString(), title, body, tag, url });
   };
   const offset = (min) => (min || 0) * 60000;
