@@ -83,8 +83,8 @@ export async function signUp(email, password) {
 export async function signOut() {
   // Сначала сохраняем профиль аккаунта, затем возвращаемся к независимому гостевому хранилищу.
   S.flush();
-  saveSession(null);
   S.switchAccount(null);
+  saveSession(null);
 }
 
 async function token() {
