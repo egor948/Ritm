@@ -138,7 +138,12 @@ markTab();
 render({ enter: true });
 setTimeout(welcome, 350);
 setTimeout(installHint, 1200);
-if (Sync.configured()) Sync.startAuto();
+if (Sync.configured()) {
+  // Завершаем OAuth callback до запуска фоновой синхронизации.
+  Sync.handleOAuthCallback()
+    .catch((e) => { console.warn('Google OAuth', e); toast(e.message || 'Не удалось завершить вход через Google'); })
+    .finally(() => Sync.startAuto());
+}
 Push.start();
 
 if ('serviceWorker' in navigator) {
