@@ -50,8 +50,14 @@ export async function signIn(email, password) {
   const j = await authCall('token?grant_type=password', { email, password });
   const next = toSession(j);
   if (!next.userId) throw new Error('Сервер не вернул идентификатор аккаунта');
-  S.switchAccount(next.userId);
-  S.mergeGuestIntoCurrent(next.userId);
+  const previousUserId = session && session.userId || null;
+  try {
+    S.switchAccount(next.userId);
+    S.mergeGuestIntoCurrent(next.userId);
+  } catch (e) {
+    S.switchAccount(previousUserId);
+    throw e;
+  }
   saveSession(next);
   await syncNow(true);
   return { ok: true };
