@@ -76,7 +76,7 @@ export function openSettings() {
                 ? [h('button', { class: 'row-btn', onclick: async () => { await Sync.syncNow(true); draw(); } }, 'Синхронизировать сейчас'), h('button', { class: 'row-btn danger', onclick: async () => { await Sync.signOut(); draw(); } }, 'Выйти')]
                 : h('button', { class: 'row-btn', onclick: () => openSignIn(draw) }, 'Войти или создать аккаунт'))
               : h('div', { class: 'row' }, h('span', { class: 'dim small' }, 'Укажите адрес и ключ Supabase в файле config.js. Подробности в README.'))),
-          sy.configured ? groupNote('Данные хранятся на устройстве и работают без сети. При подключении к интернету они сливаются: побеждает более свежая правка.') : null,
+          sy.configured ? groupNote('У каждого аккаунта отдельные данные. При первом входе локальные данные объединяются с облачными; перед объединением создаётся резервная копия.') : null,
           groupTitle('Уведомления'),
           group(
             row('Push-уведомления', ps.supported ? (ps.subscribed ? h('span', { class: 'ok-text' }, 'Включены') : ps.permission === 'denied' ? h('span', { class: 'bad-text' }, 'Запрещены') : h('span', { class: 'dim' }, 'Выключены')) : h('span', { class: 'dim' }, 'Недоступны'), { icon: 'bell', iconColor: 'orange' }),
