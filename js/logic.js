@@ -337,30 +337,27 @@ export function buildReminders(data, idx, now = new Date(), horizonDays = 14, de
   };
   const offset = (min) => (min || 0) * 60000;
 
-  for (const o of expandEvents(data.events, from, to)) {
-    const e = o.ref;
-    if (e.reminderMin == null) continue;
-    const time = e.allDay || !e.start ? defaultTime : e.start;
-    const start = localDate(o.date, time);
-    const when = new Date(start.getTime() - (e.allDay || !e.start ? 0 : offset(e.reminderMin)));
-    const body = e.allDay || !e.start ? 'Событие на сегодня' : `Начало в ${e.start}${e.location ? ' · ' + e.location : ''}`;
-    push(`ev:${e.id}:${o.date}`, when, e.title, body, `ev-${e.id}`, '#/calendar');
-  }
-  for (const t of data.tasks) {
-    if (t.done || !t.date || t.date < from || t.date > to) continue;
-    if (t.time && t.reminderMin != null) {
-      const when = new Date(localDate(t.date, t.time).getTime() - offset(t.reminderMin));
-      push(`tk:${t.id}`, when, t.title, `Задача в ${t.time}`, `tk-${t.id}`, '#/tasks');
-    } else if (!t.time && t.remindAt) {
-      push(`tk:${t.id}`, localDate(t.date, t.remindAt || defaultTime), t.title, 'Задача на сегодня', `tk-${t.id}`, '#/tasks');
+  if (data.settings?.notifyEvents !== false) {
+    for (const o of expandEvents(data.events, from, to)) {
+      const e = o.ref;
+      if (e.reminderMin == null) continue;
+      const time = e.allDay || !e.start ? defaultTime : e.start;
+      const start = localDate(o.date, time);
+      const when = new Date(start.getTime() - (e.allDay || !e.start ? 0 : offset(e.reminderMin)));
+      const body = e.allDay || !e.start ? 'Весь день' : `Время: ${e.start}`;
+      push(`ev:${e.id}:${o.date}`, when, e.title, body, `ev-${e.id}`, '#/calendar');
     }
   }
-  for (const h of data.habits) {
-    if (h.archived || !h.remind || !h.time) continue;
-    for (let i = 0; i <= horizonDays; i++) {
-      const d = addDays(from, i);
-      if (!isScheduled(h, d) || habitDone(idx, h, d)) continue;
-      push(`hb:${h.id}:${d}`, localDate(d, h.time), `${h.emoji || '•'} ${h.title}`, 'Время для привычки', `hb-${h.id}`, '#/habits');
+
+  if (data.settings?.notifyTasks !== false) {
+    for (const t of data.tasks) {
+      if (t.done || !t.date || t.date < from || t.date > to) continue;
+      if (t.time && t.reminderMin != null) {
+        const when = new Date(localDate(t.date, t.time).getTime() - offset(t.reminderMin));
+        push(`tk:${t.id}`, when, t.title, `Время: ${t.time}`, `tk-${t.id}`, '#/tasks');
+      } else if (!t.time && t.remindAt) {
+        push(`tk:${t.id}`, localDate(t.date, t.remindAt), t.title, `Время: ${t.remindAt}`, `tk-${t.id}`, '#/tasks');
+      }
     }
   }
   out.sort((a, b) => a.fireAt.localeCompare(b.fireAt));
