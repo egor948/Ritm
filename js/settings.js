@@ -82,8 +82,10 @@ export function openSettings() {
             row('Push-уведомления', ps.supported ? (ps.subscribed ? h('span', { class: 'ok-text' }, 'Включены') : ps.permission === 'denied' ? h('span', { class: 'bad-text' }, 'Запрещены') : h('span', { class: 'dim' }, 'Выключены')) : h('span', { class: 'dim' }, 'Недоступны'), { icon: 'bell', iconColor: 'orange' }),
             ps.supported && !ps.subscribed && ps.permission !== 'denied' ? h('button', { class: 'row-btn', onclick: async () => { await Push.enable(); draw(); } }, 'Включить напоминания') : null,
             ps.subscribed ? [h('button', { class: 'row-btn', onclick: () => Push.test() }, 'Отправить тестовое'), h('button', { class: 'row-btn danger', onclick: async () => { await Push.disable(); draw(); } }, 'Выключить')] : null,
-            row('Для дел без времени', selectInput(['07:00', '08:00', '09:00', '10:00', '12:00', '18:00'].map((v) => ({ v, label: v })), st.defaultRemindAt || '09:00', (v) => S.setSettings({ defaultRemindAt: v })))),
-          groupNote(ps.supported ? (ps.hint || 'На iPhone push работает после установки приложения на экран «Домой» (iOS 16.4+).') : 'Установите приложение на экран «Домой» через «Поделиться → На экран “Домой”», затем включите уведомления.'),
+            row('Напоминания о задачах', toggle(st.notifyTasks !== false, (v) => { S.setSettings({ notifyTasks: v }); Push.scheduleLocal(); Sync.pushReminders().catch(() => {}); draw(); }), { icon: 'check-square', iconColor: 'blue' }),
+            row('Напоминания о событиях', toggle(st.notifyEvents !== false, (v) => { S.setSettings({ notifyEvents: v }); Push.scheduleLocal(); Sync.pushReminders().catch(() => {}); draw(); }), { icon: 'calendar', iconColor: 'red' }),
+            row('Время для событий на весь день', selectInput(['07:00', '08:00', '09:00', '10:00', '12:00', '18:00'].map((v) => ({ v, label: v })), st.defaultRemindAt || '09:00', (v) => { S.setSettings({ defaultRemindAt: v }); Push.scheduleLocal(); Sync.pushReminders().catch(() => {}); }))),
+          groupNote(ps.supported ? (ps.hint || 'В уведомлении будут название задачи или события и время. На iPhone push работает после установки приложения на экран «Домой» (iOS 16.4+).') : 'Установите приложение на экран «Домой» через «Поделиться → На экран “Домой”», затем включите уведомления.'),
           groupTitle('Данные'),
           group(
             h('button', { class: 'row-btn', onclick: exportData }, 'Экспорт резервной копии'),
