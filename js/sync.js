@@ -110,8 +110,8 @@ export async function deleteAccount() {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error || json.message || 'Не удалось удалить аккаунт');
   const userId = session.userId;
-  S.clearAccountStorage(userId);
   S.switchAccount(null);
+  S.clearAccountStorage(userId);
   saveSession(null);
   return true;
 }
