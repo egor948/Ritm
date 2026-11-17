@@ -46,7 +46,8 @@ PWA не может создавать виджеты на главном экр
    - включите Google и укажите OAuth Client ID и Client Secret из Google Cloud.
 4. **URL авторизации.** Authentication → URL Configuration:
    - Site URL: `https://egor948.github.io/Ritm/`;
-   - Redirect URLs: добавьте `https://egor948.github.io/Ritm/`.
+   - Redirect URLs: добавьте `https://egor948.github.io/Ritm/` и `https://egor948.github.io/Ritm/**`.
+   - В письме подтверждения Email ссылка должна возвращать на `https://egor948.github.io/Ritm/`, а не на корень `https://egor948.github.io/`.
    В Google Cloud в Authorized redirect URIs укажите callback Supabase: `https://buwdepheklyrrzofkinm.supabase.co/auth/v1/callback`.
 5. **Ключи для push.** Выполните на компьютере (нужен Node.js): `npx web-push generate-vapid-keys`. Получите публичный и приватный ключи.
 6. **Конфиг приложения.** Откройте `config.js` и впишите `SUPABASE_URL`, `SUPABASE_ANON_KEY` и публичный `VAPID_PUBLIC_KEY`. Загрузите обновлённые файлы на хостинг.
