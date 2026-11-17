@@ -68,8 +68,14 @@ export async function signUp(email, password) {
   if (!j.access_token) return { needsConfirm: true };
   const next = toSession(j);
   if (!next.userId) throw new Error('Сервер не вернул идентификатор аккаунта');
-  S.switchAccount(next.userId);
-  S.mergeGuestIntoCurrent(next.userId);
+  const previousUserId = session && session.userId || null;
+  try {
+    S.switchAccount(next.userId);
+    S.mergeGuestIntoCurrent(next.userId);
+  } catch (e) {
+    S.switchAccount(previousUserId);
+    throw e;
+  }
   saveSession(next);
   await syncNow(true);
   return { ok: true };
