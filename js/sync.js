@@ -11,6 +11,11 @@ let session = null;
 let busy = false;
 let lastError = '';
 let timer = null;
+let realtimeClient = null;
+let realtimeChannel = null;
+let realtimeUserId = null;
+let realtimeLoading = null;
+let autoStarted = false;
 
 try { session = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch (_) { session = null; }
 if (session && session.userId) {
@@ -158,6 +163,7 @@ async function activateSession(next) {
   }
   saveSession(next);
   await syncNow(true);
+  await startRealtime(next.access);
 }
 
 export async function startGoogleOAuth() {
@@ -236,13 +242,14 @@ export async function signUp(email, password) {
   if (!configured()) throw new Error('Сервер не настроен');
   const redirect = location.origin + location.pathname;
   const j = await authCall('signup?redirect_to=' + encodeURIComponent(redirect), { email, password });
-  if (!j.access_token) return { needsConfirm: true };
+  if (!j.access_token) throw new Error('Supabase всё ещё ожидает подтверждение Email. Проверьте, что Confirm email выключен в настройках провайдера Email.');
   await activateSession(toSession(j));
   return { ok: true };
 }
 export async function signOut() {
   // Сначала сохраняем профиль аккаунта, затем возвращаемся к независимому гостевому хранилищу.
   S.flush();
+  stopRealtime();
   S.switchAccount(null);
   saveSession(null);
 }
@@ -252,6 +259,7 @@ async function token() {
   if (Date.now() < session.expiresAt) return session.access;
   const j = await authCall('token?grant_type=refresh_token', { refresh_token: session.refresh });
   saveSession({ ...toSession(j), email: session.email, userId: session.userId });
+  if (realtimeClient) realtimeClient.realtime.setAuth(session.access).catch((e) => console.warn('Realtime auth', e));
   return session.access;
 }
 
@@ -320,13 +328,73 @@ export async function syncNow(manual = false) {
   }
 }
 
-// автоматическая синхронизация: после правок, при возвращении в приложение, по сети
-const soon = debounce(() => syncNow(), 2500);
+// Realtime доставляет сигнал об изменениях, а REST pull забирает полные записи
+// с учётом курсора server_ts. Периодическая проверка остаётся страховкой.
+const soon = debounce(() => syncNow(), 1200);
+const realtimePullSoon = debounce(() => syncNow(), 350);
+
+async function startRealtime(accessToken) {
+  if (!session || !session.userId || !configured() || typeof WebSocket === 'undefined') return false;
+  const userId = session.userId;
+  if (realtimeChannel && realtimeUserId === userId) {
+    try { await realtimeClient.realtime.setAuth(accessToken); } catch (_) {}
+    return true;
+  }
+  stopRealtime();
+  try {
+    if (!realtimeLoading) {
+      realtimeLoading = import('https://esm.sh/@supabase/supabase-js@2')
+        .then((mod) => {
+          realtimeClient = mod.createClient(base(), CONFIG.SUPABASE_ANON_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+          });
+          return realtimeClient;
+        })
+        .finally(() => { realtimeLoading = null; });
+    }
+    const client = await realtimeLoading;
+    if (!session || session.userId !== userId) return false;
+    await client.realtime.setAuth(accessToken);
+    realtimeUserId = userId;
+    realtimeChannel = client
+      .channel('ritm-items-' + userId)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'items', filter: 'user_id=eq.' + userId,
+      }, () => realtimePullSoon())
+      .subscribe((state, error) => {
+        if (state === 'SUBSCRIBED') { lastError = ''; emit(); }
+        else if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT') console.warn('Supabase Realtime:', state, error || '');
+      });
+    return true;
+  } catch (e) {
+    console.warn('Realtime недоступен, используется резервная синхронизация:', e);
+    return false;
+  }
+}
+
+function stopRealtime() {
+  if (realtimeClient && realtimeChannel) {
+    try { realtimeClient.removeChannel(realtimeChannel); } catch (_) {}
+  }
+  realtimeChannel = null;
+  realtimeUserId = null;
+}
+
 export function startAuto() {
+  if (autoStarted) return;
+  autoStarted = true;
   S.subscribe(() => { if (session && Object.keys(S.raw().dirty).length) soon(); });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
-  window.addEventListener('online', () => syncNow());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      syncNow();
+      if (session) token().then(startRealtime).catch(() => {});
+    }
+  });
+  window.addEventListener('online', () => {
+    syncNow();
+    if (session) token().then(startRealtime).catch(() => {});
+  });
   clearInterval(timer);
   timer = setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, 60000);
-  syncNow();
+  syncNow().then(() => { if (session) token().then(startRealtime).catch(() => {}); });
 }
