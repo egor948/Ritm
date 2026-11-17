@@ -126,7 +126,7 @@ function openSignIn(done) {
         api.setTitle(mode === 'in' ? 'Вход' : 'Новый аккаунт');
         api.setRight({ label: mode === 'in' ? 'Войти' : 'Создать', bold: true, onClick: async () => {
           msg.textContent = '';
-          if (!email.includes('@') || pass.length < 8) { msg.textContent = 'Введите email и пароль (не короче 8 символов)'; return; }
+          if (!email.includes('@') || !pass || (mode === 'up' && pass.length < 8)) { msg.textContent = mode === 'up' ? 'Введите корректный email и пароль (не короче 8 символов)' : 'Введите корректный email и пароль'; return; }
           try {
             const res = mode === 'in' ? await Sync.signIn(email, pass) : await Sync.signUp(email, pass);
             if (res && res.needsConfirm) { msg.textContent = 'Мы отправили письмо — подтвердите адрес и войдите.'; mode = 'in'; return; }
@@ -182,6 +182,7 @@ function openAccountSheet(onChanged) {
         body.append(message);
         try {
           const p = await Sync.getProfile();
+          message.textContent = '';
           clear(body);
           const avatar = p.avatar
             ? h('img', { class: 'account-avatar', src: p.avatar, alt: '' })
@@ -206,7 +207,6 @@ function openAccountSheet(onChanged) {
             groupNote('При смене Email Supabase отправит письма для подтверждения. Новый адрес изменится после подтверждения.'),
             groupTitle('Данные и аккаунт'),
             group(button('Удалить аккаунт', () => confirmAccountDeletion(api, onChanged), true)),
-            message,
             h('div', { class: 'sheet-pad' }));
         } catch (e) { showError(e); }
       };
