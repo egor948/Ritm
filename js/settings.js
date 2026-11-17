@@ -126,7 +126,7 @@ function openSignIn(done) {
         api.setTitle(mode === 'in' ? 'Вход' : 'Новый аккаунт');
         api.setRight({ label: mode === 'in' ? 'Войти' : 'Создать', bold: true, onClick: async () => {
           msg.textContent = '';
-          if (!email.includes('@') || pass.length < 6) { msg.textContent = 'Введите email и пароль (не короче 6 символов)'; return; }
+          if (!email.includes('@') || pass.length < 8) { msg.textContent = 'Введите email и пароль (не короче 8 символов)'; return; }
           try {
             const res = mode === 'in' ? await Sync.signIn(email, pass) : await Sync.signUp(email, pass);
             if (res && res.needsConfirm) { msg.textContent = 'Мы отправили письмо — подтвердите адрес и войдите.'; mode = 'in'; return; }
