@@ -51,7 +51,7 @@ const OAUTH_REDIRECT_KEY = 'rhythm.oauth.redirect';
 function base64Url(bytes) {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '');
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 }
 
 async function activateSession(next) {
@@ -90,18 +90,44 @@ export async function startGoogleOAuth() {
 /** Обрабатывает возврат из Google по PKCE. Вызывать один раз при запуске приложения. */
 export async function handleOAuthCallback() {
   const params = new URLSearchParams(location.search);
+  const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
   const code = params.get('code');
-  const error = params.get('error_description') || params.get('error');
-  if (!code && !error) return false;
+  const hashAccess = hashParams.get('access_token');
+  const hashRefresh = hashParams.get('refresh_token');
+  const error = params.get('error_description') || params.get('error') || hashParams.get('error_description') || hashParams.get('error');
+  if (!code && !hashAccess && !error) return false;
+
   const verifier = localStorage.getItem(OAUTH_VERIFIER_KEY);
   const redirect = localStorage.getItem(OAUTH_REDIRECT_KEY) || (location.origin + location.pathname);
   localStorage.removeItem(OAUTH_VERIFIER_KEY);
   localStorage.removeItem(OAUTH_REDIRECT_KEY);
-  history.replaceState(null, '', redirect + (location.hash || ''));
-  if (error) throw new Error(error.replace(/\\+/g, ' '));
-  if (!code || !verifier) throw new Error('Не удалось завершить вход через Google. Начните авторизацию заново.');
-  const j = await authCall('token?grant_type=pkce', { auth_code: code, code_verifier: verifier });
-  await activateSession(toSession(j));
+
+  if (error) {
+    history.replaceState(null, '', redirect);
+    throw new Error(error.replaceAll('+', ' '));
+  }
+
+  let next;
+  if (code) {
+    if (!verifier) throw new Error('Не найдена проверка безопасности OAuth. Начните вход через Google заново.');
+    const j = await authCall('token?grant_type=pkce', { auth_code: code, code_verifier: verifier });
+    next = toSession(j);
+  } else if (hashAccess && hashRefresh) {
+    // Supabase email confirmation may return tokens in the URL fragment.
+    const expiresIn = Number(hashParams.get('expires_in') || 3600);
+    const userRes = await fetch(`${base()}/auth/v1/user`, { headers: headers(hashAccess) });
+    const user = await userRes.json().catch(() => ({}));
+    if (!userRes.ok || !user.id) throw new Error(user.message || 'Не удалось получить профиль после подтверждения email');
+    next = {
+      access: hashAccess,
+      refresh: hashRefresh,
+      expiresAt: Number(hashParams.get('expires_at')) * 1000 || Date.now() + expiresIn * 1000 - 30000,
+      userId: user.id,
+      email: user.email,
+    };
+  }
+  history.replaceState(null, '', redirect);
+  await activateSession(next);
   return true;
 }
 
@@ -114,7 +140,8 @@ export async function signIn(email, password) {
 }
 export async function signUp(email, password) {
   if (!configured()) throw new Error('Сервер не настроен');
-  const j = await authCall('signup', { email, password });
+  const redirect = location.origin + location.pathname;
+  const j = await authCall('signup?redirect_to=' + encodeURIComponent(redirect), { email, password });
   if (!j.access_token) return { needsConfirm: true };
   await activateSession(toSession(j));
   return { ok: true };
