@@ -193,12 +193,14 @@ test('push-напоминания: только события и задачи',
     events: [
       { id: 'e1', title: 'Встреча', date: '2026-11-15', start: '15:00', reminderMin: 30 },
       { id: 'e2', title: 'Без напоминания', date: '2026-11-15', start: '16:00' },
-      { id: 'e3', title: 'Прошло', date: '2026-11-15', start: '09:00', reminderMin: 10 },
+      { id: 'e3', title: 'Недавно прошло', date: '2026-11-15', start: '09:00', reminderMin: 10 },
+      { id: 'e4', title: 'Слишком давно', date: '2026-11-15', start: '05:00', reminderMin: 0 },
     ],
     tasks: [
       { id: 't1', title: 'Оплатить', date: '2026-11-16', time: '12:00', reminderMin: 60 },
       { id: 't2', title: 'Утром', date: '2026-11-17', remindAt: '09:00' },
       { id: 't3', title: 'Сделано', date: '2026-11-16', time: '12:00', reminderMin: 0, done: true },
+      { id: 't4', title: 'Через две минуты', date: '2026-11-15', time: '12:02', reminderMin: 0 },
     ],
     habits: [mkHabit({ remind: true, time: '20:00', emoji: '🏃' })],
     goals: [],
@@ -208,10 +210,12 @@ test('push-напоминания: только события и задачи',
   const ids = r.map((x) => x.id);
   assert.ok(ids.includes('ev:e1:2026-11-15'));
   assert.ok(!ids.some((i) => i.startsWith('ev:e2')));
-  assert.ok(!ids.some((i) => i.startsWith('ev:e3')));
+  assert.ok(ids.includes('ev:e3:2026-11-15')); // недавно наступившие остаются в окне доставки
+  assert.ok(!ids.some((i) => i.startsWith('ev:e4'))); // старше 6 часов — не отправляем
   assert.ok(ids.includes('tk:t1'));
   assert.ok(ids.includes('tk:t2'));
   assert.ok(!ids.includes('tk:t3'));
+  assert.ok(ids.includes('tk:t4')); // задача через две минуты ставится в расписание
   assert.ok(!ids.some((i) => i.startsWith('hb:'))); // привычки не отправляются в push
   // 15:00 минус 30 мин = 14:30 по локальному времени
   const e1 = r.find((x) => x.id === 'ev:e1:2026-11-15');
@@ -225,6 +229,21 @@ test('push-напоминания: только события и задачи',
   assert.ok(onlyEvents.every((x) => x.id.startsWith('ev:')));
   const none = L.buildReminders({ ...data, settings: { notifyEvents: false, notifyTasks: false } }, idx, now, 3);
   assert.equal(none.length, 0);
+});
+
+
+test('push-напоминания: недавнее опоздание через полночь попадает в очередь', () => {
+  const now = new Date(2026, 10, 16, 1, 0, 0);
+  const data = {
+    events: [],
+    tasks: [
+      { id: 'yesterday', title: 'Вчера поздно', date: '2026-11-15', remindAt: '23:30', time: null, done: false },
+    ],
+    habits: [],
+    goals: [],
+  };
+  const r = L.buildReminders(data, new Map(), now, 14);
+  assert.ok(r.some((item) => item.id === 'tk:yesterday'));
 });
 
 test('оценка дня', () => {
