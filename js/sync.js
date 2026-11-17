@@ -15,6 +15,7 @@ let realtimeClient = null;
 let realtimeChannel = null;
 let realtimeUserId = null;
 let realtimeLoading = null;
+let realtimeState = 'off';
 let autoStarted = false;
 
 try { session = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch (_) { session = null; }
@@ -27,7 +28,7 @@ if (session && session.userId) {
 export const configured = () => !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
 export const onChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 const emit = () => listeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
-export const status = () => ({ configured: configured(), signedIn: !!session, email: session && session.email, busy, error: lastError, lastSyncAt: S.syncMeta().lastSyncAt });
+export const status = () => ({ configured: configured(), signedIn: !!session, email: session && session.email, busy, error: lastError, lastSyncAt: S.syncMeta().lastSyncAt, realtime: realtimeState, online: typeof navigator === 'undefined' ? true : navigator.onLine, pending: Object.keys(S.raw().dirty || {}).length });
 export const getSession = () => session;
 
 async function userRequest(method = 'GET', body) {
@@ -334,13 +335,14 @@ const soon = debounce(() => syncNow(), 1200);
 const realtimePullSoon = debounce(() => syncNow(), 350);
 
 async function startRealtime(accessToken) {
-  if (!session || !session.userId || !configured() || typeof WebSocket === 'undefined') return false;
+  if (!session || !session.userId || !configured() || typeof WebSocket === 'undefined') { realtimeState = 'off'; emit(); return false; }
   const userId = session.userId;
   if (realtimeChannel && realtimeUserId === userId) {
     try { await realtimeClient.realtime.setAuth(accessToken); } catch (_) {}
     return true;
   }
   stopRealtime();
+  realtimeState = 'connecting'; emit();
   try {
     if (!realtimeLoading) {
       realtimeLoading = import('https://esm.sh/@supabase/supabase-js@2')
@@ -362,11 +364,14 @@ async function startRealtime(accessToken) {
         event: '*', schema: 'public', table: 'items', filter: 'user_id=eq.' + userId,
       }, () => realtimePullSoon())
       .subscribe((state, error) => {
-        if (state === 'SUBSCRIBED') { lastError = ''; emit(); }
-        else if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT') console.warn('Supabase Realtime:', state, error || '');
+        if (state === 'SUBSCRIBED') { realtimeState = 'connected'; lastError = ''; emit(); }
+        else if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT') { realtimeState = 'error'; emit(); console.warn('Supabase Realtime:', state, error || ''); }
+        else if (state === 'CLOSED') { realtimeState = 'off'; emit(); }
+        else { realtimeState = 'connecting'; emit(); }
       });
     return true;
   } catch (e) {
+    realtimeState = 'error'; emit();
     console.warn('Realtime недоступен, используется резервная синхронизация:', e);
     return false;
   }
@@ -378,6 +383,7 @@ function stopRealtime() {
   }
   realtimeChannel = null;
   realtimeUserId = null;
+  realtimeState = 'off';
 }
 
 export function startAuto() {
