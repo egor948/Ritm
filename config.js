@@ -3,5 +3,5 @@
 export const CONFIG = {
   SUPABASE_URL: 'https://buwdepheklyrrzofkinm.supabase.co', // например https://abcdxyz.supabase.co
   SUPABASE_ANON_KEY: 'sb_publishable_rAhQnWLhlhuGZfzotvvecQ_44v9rWtC', // публичный anon-ключ проекта
-  VAPID_PUBLIC_KEY: '', // публичный VAPID-ключ для push-уведомлений
+  VAPID_PUBLIC_KEY: 'BLF6v2AOp9FdNyxtYG18j1HbCA2O50POIyBnfYbApDU8Cod5WBK1McZDUAWGsHlGMq4j3bDGArIfSQhiiy-Awx4', // публичный VAPID-ключ для push-уведомлений
 };
