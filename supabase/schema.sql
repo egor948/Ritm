@@ -27,6 +27,19 @@ drop policy if exists "own items" on public.items;
 create policy "own items" on public.items for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- ---------------------------------------------------------------- Realtime: события об изменениях для мгновенной синхронизации
+do $
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'items'
+  ) then
+    alter publication supabase_realtime add table public.items;
+  end if;
+end $;
+
 -- ---------------------------------------------------------------- push-подписки устройств
 create table if not exists public.push_subscriptions (
   user_id  uuid not null default auth.uid() references auth.users(id) on delete cascade,
