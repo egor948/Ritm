@@ -70,7 +70,7 @@ export function openSettings() {
             row('Неделя начинается с', selectInput([{ v: 1, label: 'Понедельника' }, { v: 0, label: 'Воскресенья' }], st.weekStart, (v) => S.setSettings({ weekStart: Number(v) })), { icon: 'calendar', iconColor: 'red' })),
           groupTitle('Синхронизация между устройствами'),
           group(
-            row(sy.configured ? (sy.signedIn ? sy.email : 'Вход не выполнен') : 'Сервер не подключён', sy.configured && sy.signedIn ? h('span', { class: 'dim' }, sy.busy ? 'Синхронизация…' : sy.lastSyncAt ? 'Готово' : '') : null, { icon: 'cloud', iconColor: 'blue' }),
+            row(sy.configured ? (sy.signedIn ? sy.email : 'Вход не выполнен') : 'Сервер не подключён', sy.configured && sy.signedIn ? h('span', { class: 'sync-state ' + (sy.error || !sy.online ? 'sync-bad' : sy.busy || sy.pending ? 'sync-wait' : sy.realtime === 'connected' ? 'sync-good' : 'sync-muted') }, sy.error ? 'Ошибка синхронизации' : !sy.online ? 'Нет соединения' : sy.busy || sy.pending ? 'Синхронизация…' : sy.realtime === 'connected' ? 'Синхронизировано · онлайн' : sy.realtime === 'connecting' ? 'Подключение…' : sy.lastSyncAt ? 'Синхронизировано · резервный режим' : 'Ожидание синхронизации') : null, { icon: 'cloud', iconColor: 'blue' }),
             sy.configured
               ? (sy.signedIn
                 ? [h('button', { class: 'row-btn', onclick: () => openAccountSheet(draw) }, 'Личный кабинет'), h('button', { class: 'row-btn', onclick: async () => { await Sync.syncNow(true); draw(); } }, 'Синхронизировать сейчас'), h('button', { class: 'row-btn danger', onclick: async () => { await Sync.signOut(); draw(); } }, 'Выйти')]
