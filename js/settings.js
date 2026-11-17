@@ -73,7 +73,7 @@ export function openSettings() {
             row(sy.configured ? (sy.signedIn ? sy.email : 'Вход не выполнен') : 'Сервер не подключён', sy.configured && sy.signedIn ? h('span', { class: 'dim' }, sy.busy ? 'Синхронизация…' : sy.lastSyncAt ? 'Готово' : '') : null, { icon: 'cloud', iconColor: 'blue' }),
             sy.configured
               ? (sy.signedIn
-                ? [h('button', { class: 'row-btn', onclick: async () => { await Sync.syncNow(true); draw(); } }, 'Синхронизировать сейчас'), h('button', { class: 'row-btn danger', onclick: async () => { await Sync.signOut(); draw(); } }, 'Выйти')]
+                ? [h('button', { class: 'row-btn', onclick: () => openAccountSheet(draw) }, 'Личный кабинет'), h('button', { class: 'row-btn', onclick: async () => { await Sync.syncNow(true); draw(); } }, 'Синхронизировать сейчас'), h('button', { class: 'row-btn danger', onclick: async () => { await Sync.signOut(); draw(); } }, 'Выйти')]
                 : h('button', { class: 'row-btn', onclick: () => openSignIn(draw) }, 'Войти или создать аккаунт'))
               : h('div', { class: 'row' }, h('span', { class: 'dim small' }, 'Укажите адрес и ключ Supabase в файле config.js. Подробности в README.'))),
           sy.configured ? groupNote('У каждого аккаунта отдельные данные. При первом входе локальные данные объединяются с облачными; перед объединением создаётся резервная копия.') : null,
@@ -158,10 +158,160 @@ function openSignIn(done) {
                 h('svg:path', { d: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z' }),
                 h('svg:circle', { cx: 12, cy: 12, r: 3 }))))),
           msg,
+          mode === 'in' ? h('button', { class: 'link-btn', onclick: () => requestPasswordResetFromSignIn(email, msg) }, 'Забыли пароль?') : null,
           h('button', { class: 'link-btn', onclick: () => { mode = mode === 'in' ? 'up' : 'in'; draw(); } }, mode === 'in' ? 'Нет аккаунта? Создать' : 'Уже есть аккаунт? Войти'),
           h('div', { class: 'sheet-pad' }));
       };
       draw();
     },
   });
+}
+
+
+function openAccountSheet(onChanged) {
+  openSheet({
+    title: 'Личный кабинет', left: { label: 'Назад' }, tall: true,
+    build(api) {
+      const message = h('div', { class: 'group-note' }, 'Загружаем профиль…');
+      const body = h('div', { class: 'account-profile' });
+      api.body.append(body);
+      const button = (label, fn, danger = false) => h('button', { class: 'row-btn' + (danger ? ' danger' : ''), onclick: fn }, label);
+      const showError = (e) => { message.className = 'group-note bad-text'; message.textContent = e.message || 'Не удалось выполнить действие'; };
+      const draw = async () => {
+        clear(body);
+        body.append(message);
+        try {
+          const p = await Sync.getProfile();
+          clear(body);
+          const avatar = p.avatar
+            ? h('img', { class: 'account-avatar', src: p.avatar, alt: '' })
+            : h('div', { class: 'account-avatar account-avatar-fallback' }, (p.name || p.email || '?').slice(0, 1).toUpperCase());
+          const providers = p.providers.map((x) => x === 'google' ? 'Google' : x === 'email' ? 'Email' : x).join(' · ');
+          body.append(
+            h('div', { class: 'account-hero' }, avatar,
+              h('b', null, p.name || 'Пользователь'),
+              h('span', null, p.email || ''),
+              h('small', null, providers || 'Аккаунт Ritm'),
+              h('small', null, p.emailVerified ? 'Email подтверждён' : 'Email не подтверждён')),
+            groupTitle('Профиль'),
+            group(button('Изменить имя', () => editAccountName(p, draw, showError))),
+            groupTitle('Безопасность'),
+            group(
+              button('Изменить пароль', () => editAccountPassword(draw, showError)),
+              button('Изменить Email', () => editAccountEmail(draw, showError)),
+              button('Отправить письмо для сброса пароля', async () => {
+                try { await Sync.requestPasswordReset(p.email); toast('Письмо для восстановления отправлено'); }
+                catch (e) { showError(e); }
+              })),
+            groupNote('При смене Email Supabase отправит письма для подтверждения. Новый адрес изменится после подтверждения.'),
+            groupTitle('Данные и аккаунт'),
+            group(button('Удалить аккаунт', () => confirmAccountDeletion(api, onChanged), true)),
+            message,
+            h('div', { class: 'sheet-pad' }));
+        } catch (e) { showError(e); }
+      };
+      draw();
+    },
+  });
+}
+
+function editAccountName(profile, refresh, showError) {
+  let name = profile.name || '';
+  openSheet({
+    title: 'Имя профиля', left: { label: 'Отмена' },
+    build(api) {
+      const input = h('input', { class: 'inp', type: 'text', maxlength: 60, placeholder: 'Как к вам обращаться', value: name, oninput: (e) => { name = e.target.value; } });
+      const msg = h('div', { class: 'group-note' });
+      api.body.append(group(input), msg);
+      api.setRight({ label: 'Сохранить', bold: true, onClick: async () => {
+        try { await Sync.updateProfile(name); api.close(); toast('Имя обновлено'); refresh(); }
+        catch (e) { msg.className = 'group-note bad-text'; msg.textContent = e.message; }
+      } });
+    },
+  });
+}
+
+function editAccountPassword(refresh, showError) {
+  let password = '', repeat = '';
+  openSheet({
+    title: 'Новый пароль', left: { label: 'Отмена' },
+    build(api) {
+      const first = h('input', { class: 'inp', type: 'password', autocomplete: 'new-password', placeholder: 'Новый пароль (от 8 символов)', oninput: (e) => { password = e.target.value; } });
+      const second = h('input', { class: 'inp', type: 'password', autocomplete: 'new-password', placeholder: 'Повторите пароль', oninput: (e) => { repeat = e.target.value; } });
+      const msg = h('div', { class: 'group-note' });
+      const eye = (input) => h('button', { type: 'button', class: 'password-eye', 'aria-label': 'Показать пароль', onclick: (e) => {
+        const visible = input.type === 'password'; input.type = visible ? 'text' : 'password';
+        e.currentTarget.innerHTML = visible
+          ? '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c5.2 0 8.7 4.2 10 7-.4.9-1.2 2.1-2.3 3.2M6.2 6.2C3.9 7.7 2.5 10 2 12c1.3 2 4.8 7 10 7 1.2 0 2.3-.2 3.3-.6"/></svg>'
+          : '<svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+      } }, ic('eye', 18));
+      const field = (input) => h('div', { class: 'row solo password-row' }, input, eye(input));
+      api.body.append(group(field(first), field(second)), msg);
+      api.setRight({ label: 'Сохранить', bold: true, onClick: async () => {
+        if (password.length < 8) { msg.textContent = 'Пароль должен содержать минимум 8 символов'; return; }
+        if (password !== repeat) { msg.textContent = 'Пароли не совпадают'; return; }
+        try { await Sync.changePassword(password); api.close(); toast('Пароль изменён'); refresh(); }
+        catch (e) { msg.className = 'group-note bad-text'; msg.textContent = e.message; }
+      } });
+    },
+  });
+}
+
+function editAccountEmail(refresh) {
+  openSheet({
+    title: 'Новый Email', left: { label: 'Отмена' },
+    build(api) {
+      const input = h('input', { class: 'inp', type: 'email', autocomplete: 'email', placeholder: 'Новый email' });
+      const msg = h('div', { class: 'group-note' });
+      api.body.append(group(input), msg);
+      api.setRight({ label: 'Отправить', bold: true, onClick: async () => {
+        try { await Sync.changeEmail(input.value); api.close(); toast('Письмо для подтверждения отправлено'); refresh(); }
+        catch (e) { msg.className = 'group-note bad-text'; msg.textContent = e.message; }
+      } });
+    },
+  });
+}
+
+function confirmAccountDeletion(parentApi, onChanged) {
+  actionSheet({
+    title: 'Удалить аккаунт Ritm?',
+    message: 'Будут безвозвратно удалены аккаунт, облачные цели, задачи, привычки, события и связанные подписки. Экспортируйте резервную копию перед удалением. Это действие нельзя отменить.',
+    actions: [{
+      label: 'Удалить аккаунт навсегда', danger: true,
+      onClick: async () => {
+        try {
+          await Sync.deleteAccount();
+          parentApi.close(true);
+          toast('Аккаунт и облачные данные удалены');
+          onChanged && onChanged();
+        } catch (e) { toast(e.message || 'Не удалось удалить аккаунт'); }
+      },
+    }],
+  });
+}
+
+export function openPasswordRecoverySheet() {
+  openSheet({
+    title: 'Новый пароль', left: null, tall: false,
+    build(api) {
+      let password = '', repeat = '';
+      const first = h('input', { class: 'inp', type: 'password', autocomplete: 'new-password', placeholder: 'Новый пароль (от 8 символов)', oninput: (e) => { password = e.target.value; } });
+      const second = h('input', { class: 'inp', type: 'password', autocomplete: 'new-password', placeholder: 'Повторите пароль', oninput: (e) => { repeat = e.target.value; } });
+      const msg = h('div', { class: 'group-note bad-text' });
+      api.body.append(group(first, second), msg);
+      api.setRight({ label: 'Сохранить', bold: true, onClick: async () => {
+        if (password.length < 8) { msg.textContent = 'Пароль должен содержать минимум 8 символов'; return; }
+        if (password !== repeat) { msg.textContent = 'Пароли не совпадают'; return; }
+        try { await Sync.changePassword(password); api.close(true); await Sync.signOut(); toast('Пароль обновлён. Теперь войдите с новым паролем.'); }
+        catch (e) { msg.textContent = e.message || 'Не удалось обновить пароль'; }
+      } });
+    },
+  });
+}
+
+function requestPasswordResetFromSignIn(email, message) {
+  if (!email || !email.includes('@')) { message.textContent = 'Сначала укажите Email'; return; }
+  Sync.requestPasswordReset(email)
+    .then(() => { message.className = 'group-note'; message.textContent = 'Письмо для восстановления отправлено, проверьте почту.'; })
+    .catch((e) => { message.className = 'group-note bad-text'; message.textContent = e.message || 'Не удалось отправить письмо'; });
 }
