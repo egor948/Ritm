@@ -45,11 +45,17 @@ async function authCall(path, body) {
 }
 const toSession = (j) => ({ access: j.access_token, refresh: j.refresh_token, expiresAt: Date.now() + (j.expires_in || 3600) * 1000 - 30000, userId: j.user && j.user.id, email: j.user && j.user.email });
 
-export async function signIn(email, password) {
-  if (!configured()) throw new Error('Сервер не настроен');
-  const j = await authCall('token?grant_type=password', { email, password });
-  const next = toSession(j);
-  if (!next.userId) throw new Error('Сервер не вернул идентификатор аккаунта');
+const OAUTH_VERIFIER_KEY = 'rhythm.oauth.verifier';
+const OAUTH_REDIRECT_KEY = 'rhythm.oauth.redirect';
+
+function base64Url(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '');
+}
+
+async function activateSession(next) {
+  if (!next.userId || !next.access || !next.refresh) throw new Error('Supabase не вернул полноценную сессию');
   const previousUserId = session && session.userId || null;
   try {
     S.switchAccount(next.userId);
@@ -60,24 +66,57 @@ export async function signIn(email, password) {
   }
   saveSession(next);
   await syncNow(true);
+}
+
+export async function startGoogleOAuth() {
+  if (!configured()) throw new Error('Сервер не настроен');
+  if (!globalThis.crypto?.subtle || !globalThis.crypto?.getRandomValues) throw new Error('Для входа через Google нужен современный браузер и защищённое соединение HTTPS');
+  const bytes = new Uint8Array(64);
+  crypto.getRandomValues(bytes);
+  const verifier = base64Url(bytes);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  const challenge = base64Url(new Uint8Array(digest));
+  const redirect = location.origin + location.pathname;
+  localStorage.setItem(OAUTH_VERIFIER_KEY, verifier);
+  localStorage.setItem(OAUTH_REDIRECT_KEY, redirect);
+  const url = new URL(`${base()}/auth/v1/authorize`);
+  url.searchParams.set('provider', 'google');
+  url.searchParams.set('redirect_to', redirect);
+  url.searchParams.set('code_challenge', challenge);
+  url.searchParams.set('code_challenge_method', 's256');
+  location.assign(url.toString());
+}
+
+/** Обрабатывает возврат из Google по PKCE. Вызывать один раз при запуске приложения. */
+export async function handleOAuthCallback() {
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code');
+  const error = params.get('error_description') || params.get('error');
+  if (!code && !error) return false;
+  const verifier = localStorage.getItem(OAUTH_VERIFIER_KEY);
+  const redirect = localStorage.getItem(OAUTH_REDIRECT_KEY) || (location.origin + location.pathname);
+  localStorage.removeItem(OAUTH_VERIFIER_KEY);
+  localStorage.removeItem(OAUTH_REDIRECT_KEY);
+  history.replaceState(null, '', redirect + (location.hash || ''));
+  if (error) throw new Error(error.replace(/\\+/g, ' '));
+  if (!code || !verifier) throw new Error('Не удалось завершить вход через Google. Начните авторизацию заново.');
+  const j = await authCall('token?grant_type=pkce', { auth_code: code, code_verifier: verifier });
+  await activateSession(toSession(j));
+  return true;
+}
+
+
+export async function signIn(email, password) {
+  if (!configured()) throw new Error('Сервер не настроен');
+  const j = await authCall('token?grant_type=password', { email, password });
+  await activateSession(toSession(j));
   return { ok: true };
 }
 export async function signUp(email, password) {
   if (!configured()) throw new Error('Сервер не настроен');
   const j = await authCall('signup', { email, password });
   if (!j.access_token) return { needsConfirm: true };
-  const next = toSession(j);
-  if (!next.userId) throw new Error('Сервер не вернул идентификатор аккаунта');
-  const previousUserId = session && session.userId || null;
-  try {
-    S.switchAccount(next.userId);
-    S.mergeGuestIntoCurrent(next.userId);
-  } catch (e) {
-    S.switchAccount(previousUserId);
-    throw e;
-  }
-  saveSession(next);
-  await syncNow(true);
+  await activateSession(toSession(j));
   return { ok: true };
 }
 export async function signOut() {
