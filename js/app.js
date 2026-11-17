@@ -8,7 +8,7 @@ import { calendarScreen, isDragging } from './calendar.js';
 import { tasksScreen } from './tasks.js';
 import { goalsScreen } from './goals.js';
 import { habitsScreen, tickTimers } from './habits.js';
-import { applyTheme } from './settings.js';
+import { applyTheme, openPasswordRecoverySheet } from './settings.js';
 import * as Sync from './sync.js';
 import * as Push from './push.js';
 import { closeTopLayer, hasLayer } from './layers.js';
@@ -141,7 +141,8 @@ setTimeout(installHint, 1200);
 if (Sync.configured()) {
   // Завершаем OAuth callback до запуска фоновой синхронизации.
   Sync.handleOAuthCallback()
-    .catch((e) => { console.warn('Google OAuth', e); toast(e.message || 'Не удалось завершить вход через Google'); })
+    .then(() => { if (Sync.takePasswordRecovery()) openPasswordRecoverySheet(); })
+    .catch((e) => { console.warn('OAuth callback', e); toast(e.message || 'Не удалось завершить авторизацию'); })
     .finally(() => Sync.startAuto());
 }
 Push.start();
