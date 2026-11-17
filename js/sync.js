@@ -25,6 +25,98 @@ const emit = () => listeners.forEach((fn) => { try { fn(); } catch (e) { console
 export const status = () => ({ configured: configured(), signedIn: !!session, email: session && session.email, busy, error: lastError, lastSyncAt: S.syncMeta().lastSyncAt });
 export const getSession = () => session;
 
+async function userRequest(method = 'GET', body) {
+  const access = await token();
+  const res = await fetch(`${base()}/auth/v1/user`, {
+    method,
+    headers: headers(access),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = json.msg || json.message || json.error_description || 'Не удалось обновить профиль';
+    throw new Error(/same.*email|already.*registered|already.*exists/i.test(message) ? 'Этот email уже используется' : message);
+  }
+  if (json.email) {
+    session = { ...session, email: json.email };
+    try { localStorage.setItem(AUTH_KEY, JSON.stringify(session)); } catch (_) {}
+    emit();
+  }
+  return json;
+}
+
+export async function getProfile() {
+  if (!session) throw new Error('Войдите в аккаунт');
+  const user = await userRequest('GET');
+  return {
+    id: user.id,
+    email: user.email || session.email,
+    name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+    avatar: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
+    providers: user.app_metadata?.providers || [user.app_metadata?.provider || 'email'],
+    emailVerified: !!user.email_confirmed_at,
+    createdAt: user.created_at || null,
+    lastSignInAt: user.last_sign_in_at || null,
+  };
+}
+
+export async function updateProfile(name) {
+  const current = await getProfile();
+  const clean = String(name || '').trim().slice(0, 60);
+  const user = await userRequest('PUT', { data: { full_name: clean } });
+  return { ...current, name: user.user_metadata?.full_name || clean };
+}
+
+export async function changePassword(password) {
+  if (!session) throw new Error('Войдите в аккаунт');
+  if (String(password).length < 8) throw new Error('Пароль должен содержать минимум 8 символов');
+  await userRequest('PUT', { password });
+  return true;
+}
+
+export async function changeEmail(email) {
+  if (!session) throw new Error('Войдите в аккаунт');
+  const clean = String(email || '').trim().toLowerCase();
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(clean)) throw new Error('Введите корректный email');
+  await userRequest('PUT', { email: clean });
+  return true;
+}
+
+export async function requestPasswordReset(email) {
+  if (!configured()) throw new Error('Сервер не настроен');
+  const redirect = location.origin + location.pathname;
+  const res = await fetch(`${base()}/auth/v1/recover?redirect_to=${encodeURIComponent(redirect)}`, {
+    method: 'POST', headers: headers(), body: JSON.stringify({ email: String(email || '').trim().toLowerCase() }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.msg || json.message || 'Не удалось отправить письмо');
+  return true;
+}
+
+export function takePasswordRecovery() {
+  const pending = localStorage.getItem('rhythm.password.recovery') === '1';
+  if (pending) localStorage.removeItem('rhythm.password.recovery');
+  return pending;
+}
+
+export async function deleteAccount() {
+  if (!session) throw new Error('Войдите в аккаунт');
+  const access = await token();
+  const res = await fetch(`${base()}/functions/v1/delete-account`, {
+    method: 'POST',
+    headers: { ...headers(access), Authorization: `Bearer ${access}` },
+    body: JSON.stringify({ confirm: 'DELETE' }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || json.message || 'Не удалось удалить аккаунт');
+  const userId = session.userId;
+  S.clearAccountStorage(userId);
+  S.switchAccount(null);
+  saveSession(null);
+  return true;
+}
+
+
 function saveSession(s) {
   session = s;
   try { s ? localStorage.setItem(AUTH_KEY, JSON.stringify(s)) : localStorage.removeItem(AUTH_KEY); } catch (_) { /* ok */ }
@@ -94,6 +186,7 @@ export async function handleOAuthCallback() {
   const code = params.get('code');
   const hashAccess = hashParams.get('access_token');
   const hashRefresh = hashParams.get('refresh_token');
+  const flowType = params.get('type') || hashParams.get('type');
   const error = params.get('error_description') || params.get('error') || hashParams.get('error_description') || hashParams.get('error');
   if (!code && !hashAccess && !error) return false;
 
@@ -127,6 +220,7 @@ export async function handleOAuthCallback() {
     };
   }
   history.replaceState(null, '', redirect);
+  if (flowType === 'recovery') localStorage.setItem('rhythm.password.recovery', '1');
   await activateSession(next);
   return true;
 }
