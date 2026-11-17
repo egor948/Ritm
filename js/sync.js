@@ -13,6 +13,11 @@ let lastError = '';
 let timer = null;
 
 try { session = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch (_) { session = null; }
+if (session && session.userId) {
+  S.switchAccount(session.userId);
+  try { S.mergeGuestIntoCurrent(session.userId); }
+  catch (e) { lastError = 'Не удалось создать резервную копию перед объединением: ' + (e.message || e); }
+}
 
 export const configured = () => !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
 export const onChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
@@ -43,10 +48,11 @@ const toSession = (j) => ({ access: j.access_token, refresh: j.refresh_token, ex
 export async function signIn(email, password) {
   if (!configured()) throw new Error('Сервер не настроен');
   const j = await authCall('token?grant_type=password', { email, password });
-  saveSession(toSession(j));
-  // другой аккаунт → начинаем синхронизацию заново
-  S.setSyncMeta({ cursor: null });
-  S.markAllDirty();
+  const next = toSession(j);
+  if (!next.userId) throw new Error('Сервер не вернул идентификатор аккаунта');
+  S.switchAccount(next.userId);
+  S.mergeGuestIntoCurrent(next.userId);
+  saveSession(next);
   await syncNow(true);
   return { ok: true };
 }
@@ -54,15 +60,19 @@ export async function signUp(email, password) {
   if (!configured()) throw new Error('Сервер не настроен');
   const j = await authCall('signup', { email, password });
   if (!j.access_token) return { needsConfirm: true };
-  saveSession(toSession(j));
-  S.setSyncMeta({ cursor: null });
-  S.markAllDirty();
+  const next = toSession(j);
+  if (!next.userId) throw new Error('Сервер не вернул идентификатор аккаунта');
+  S.switchAccount(next.userId);
+  S.mergeGuestIntoCurrent(next.userId);
+  saveSession(next);
   await syncNow(true);
   return { ok: true };
 }
 export async function signOut() {
+  // Сначала сохраняем профиль аккаунта, затем возвращаемся к независимому гостевому хранилищу.
+  S.flush();
   saveSession(null);
-  S.setSyncMeta({ cursor: null, lastSyncAt: 0 });
+  S.switchAccount(null);
 }
 
 async function token() {
