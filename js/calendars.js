@@ -49,7 +49,7 @@ function openCalendarEditor(calendar, onSaved) {
       onClick: (sheet) => {
         const name = String(draft.name || '').trim();
         if (!name) { toast('Укажите название календаря'); nameControl.focus(); return; }
-        const duplicate = S.data().calendars.some((item) => item.id !== (calendar && calendar.id) && item.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
+        const duplicate = S.data().calendars.some((item) => item.id !== (calendar && calendar.id) && String(item.name || '').trim().toLocaleLowerCase() === name.toLocaleLowerCase());
         if (duplicate) { toast('Календарь с таким названием уже есть'); nameControl.focus(); return; }
         S.upsert('calendars', {
           ...(calendar || {}),
@@ -132,13 +132,17 @@ export function openCalendarManager(onFilters, onSelectCalendar) {
             h('small', null, `${count} ${plural(count, ['событие', 'события', 'событий'])} · ${calendar.visible === false ? 'Скрыт' : 'Показывается'}`)),
           selected ? h('span', { class: 'calendar-selected-mark' }, ic('check', 16)) : null),
         h('button', { type: 'button', class: 'calendar-manage-edit', 'aria-label': 'Настроить календарь', onclick: () => openCalendarEditor(calendar, draw) }, ic('edit', 17)),
-        toggle(calendar.visible !== false, (visible) => {
-          S.upsert('calendars', { id: calendar.id, visible });
-          if (!visible && S.settings().calFilters?.calendarId === calendar.id) {
-            S.setSettings({ calFilters: { ...(S.settings().calFilters || {}), calendarId: null } });
-          }
-          draw();
-        }),
+        (() => {
+          const control = toggle(calendar.visible !== false, (visible) => {
+            S.upsert('calendars', { id: calendar.id, visible });
+            if (!visible && S.settings().calFilters?.calendarId === calendar.id) {
+              S.setSettings({ calFilters: { ...(S.settings().calFilters || {}), calendarId: null } });
+            }
+            draw();
+          });
+          control.setAttribute('aria-label', `Показывать календарь ${calendar.name || ''}`);
+          return control;
+        })(),
       );
     });
     api.body.append(
