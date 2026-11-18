@@ -694,3 +694,7 @@ small { font-size: 12px; }
 @media (max-width: 380px) {
   .reminder-fields { grid-template-columns: minmax(0, 1fr); gap: 10px; }
 }
+
+
+/* Keep iOS from applying automatic scroll anchoring to sheet DOM changes. */
+.sheet-body { overflow-anchor: none; scroll-behavior: auto; }
