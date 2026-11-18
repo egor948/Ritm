@@ -225,10 +225,11 @@ export function setLog(habitId, date, value) {
 }
 
 export function setSettings(patch) {
+  localTheme();
   const sharedPatch = { ...patch };
   delete sharedPatch.theme; // тема устройства никогда не записывается в профиль
   state.settings = { ...state.settings, ...sharedPatch, updatedAt: Date.now() };
-  if (deviceTheme !== null) delete state.settings.theme;
+  delete state.settings.theme;
   state.dirty['settings:main'] = 1;
   commit();
 }
@@ -342,6 +343,7 @@ export function resetAll() {
   commit();
 }
 export function replaceAllWith(newState) {
+  localTheme();
   const nextSettings = { ...defaultSettings(), ...(newState.settings || {}) };
   delete nextSettings.theme;
   state = { ...emptyState(), ...newState, settings: nextSettings };
