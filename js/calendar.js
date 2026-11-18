@@ -144,7 +144,7 @@ function attachResize(handle, block, spec) {
 // ---------------------------------------------------------------- перенос и изменение элементов
 function moveItem(it, date, startMin) {
   if (it.type === 'task') {
-    S.upsert('tasks', { id: it.id, date, time: fromMin(startMin), duration: it.endMin - it.startMin });
+    S.upsert('tasks', { id: it.id, date, time: fromMin(startMin), duration: null });
     toast(`Задача запланирована на ${fromMin(startMin)}`);
     return;
   }
@@ -157,8 +157,7 @@ function moveItem(it, date, startMin) {
   if (repeating && date !== it.date) toast('У повторяющегося события изменено только время');
 }
 function resizeItem(it, durMin) {
-  if (it.type === 'task') S.upsert('tasks', { id: it.id, duration: durMin });
-  else S.upsert('events', { id: it.id, end: fromMin(Math.min(1439, it.startMin + durMin)) });
+  S.upsert('events', { id: it.id, end: fromMin(Math.min(1439, it.startMin + durMin)) });
 }
 
 // ---------------------------------------------------------------- построение таймлайна
@@ -204,7 +203,7 @@ function timeline({ dates, mode, data, filters, extraHeader }) {
         h('div', { class: 'blk-text' }, h('b', null, it.title), !small && mode === 'day' ? h('span', null, `${fromMin(it.startMin)} – ${fromMin(it.endMin)}${it.type === 'event' && it.ref.location ? ' · ' + it.ref.location : ''}`) : null));
       if (!it.done || true) {
         attachDrag(block, { dur: () => it.endMin - it.startMin, getCtx: ctxFn, grab: 'top', onDrop: (d, m) => moveItem(it, d, m) });
-        if (height >= 30) {
+        if (!isTask && height >= 30) {
           const handle = h('div', { class: 'blk-resize', 'data-nodrag': 1 });
           block.appendChild(handle);
           attachResize(handle, block, { hourH, onResize: (dur) => resizeItem(it, dur) });
@@ -303,7 +302,7 @@ function itemRow(it, date) {
   let sub = '';
   if (t === 'goal') { time = 'срок'; sub = 'Дедлайн цели'; }
   else if (t === 'event') { const e = it.ref; time = e.allDay || !e.start ? 'весь день' : `${e.start}`; sub = e.allDay ? (e.endDate ? `до ${fmtDayMonth(e.endDate)}` : '') : `${e.start}–${e.end || ''}`; if (e.location) sub += (sub ? ' · ' : '') + e.location; }
-  else { time = it.ref.time || 'задача'; sub = it.ref.time ? `${it.ref.time}–${fromMin(it.endMin)}` : 'Без времени'; }
+  else { time = it.ref.time || 'задача'; sub = it.ref.time ? '' : 'Без времени'; }
   const click = t === 'goal' ? () => openGoalDetail(it.id) : t === 'event' ? () => editEvent(it.ref, {}, date) : () => editTask(it.ref);
   return h('div', { class: 'ag-item' + (it.done ? ' done' : ''), style: { '--c': cv(it.color) }, onclick: click },
     h('div', { class: 'ai-time' }, time), h('i', { class: 'ai-bar' }),
@@ -378,7 +377,7 @@ function trayFor(date, data) {
     return { t, el: h('div', { class: 'tray-chip' + (t.date && t.date < today ? ' late' : ''), style: { '--c': cv(color) }, onclick: () => editTask(t) }, h('i'), h('span', null, t.title)), };
   });
   let getCtx = null;
-  chips.forEach(({ t, el }) => attachDrag(el, { dur: () => t.duration || 30, grab: 'center', getCtx: () => getCtx(), onDrop: (d, m) => { S.upsert('tasks', { id: t.id, date: d, time: fromMin(m), duration: t.duration || 30 }); toast(`Задача запланирована на ${fromMin(m)}`); } }));
+  chips.forEach(({ t, el }) => attachDrag(el, { dur: () => 30, grab: 'center', getCtx: () => getCtx(), onDrop: (d, m) => { S.upsert('tasks', { id: t.id, date: d, time: fromMin(m), duration: null }); toast(`Задача запланирована на ${fromMin(m)}`); } }));
   const el = h('div', { class: 'tray' },
     h('div', { class: 'tray-head' }, h('b', null, 'К планированию'), h('span', null, 'удерживайте и перетащите на время')),
     h('div', { class: 'hscroll tray-row' }, chips.map((c) => c.el)));
