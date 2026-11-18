@@ -252,7 +252,7 @@ export function dayItems(data, date, opts = {}) {
         const s = toMin(e.start);
         let en = e.end ? toMin(e.end) : s + 60;
         if (en <= s) en = Math.min(1440, s + 30);
-        timed.push({ ...o, title: e.title, color: e.color || 'blue', startMin: s, endMin: en });
+        timed.push({ ...o, title: e.title, color: eventColor(e), startMin: s, endMin: en });
       }
     }
   }
