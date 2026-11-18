@@ -149,7 +149,9 @@ if (Sync.configured()) {
 Push.start();
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW', e));
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+    .then((registration) => registration.update())
+    .catch((e) => console.warn('SW', e));
   navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open' && e.data.url) { const id = String(e.data.url).replace(/^.*#\//, ''); go(id); } });
 }
 void view; void debounce;
