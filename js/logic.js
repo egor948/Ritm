@@ -380,8 +380,6 @@ export function buildReminders(data, idx, now = new Date(), horizonDays = 14, de
   // Это позволяет поставить в очередь напоминание, если синхронизация произошла
   // уже после его времени, но сервер ещё успевает его доставить.
   const staleBefore = now.getTime() - 6 * 3600 * 1000;
-  const from = ymd(new Date(staleBefore));
-  const to = addDays(ymd(now), horizonDays);
   const horizonEnd = localDate(addDays(ymd(now), horizonDays + 1), '00:00').getTime();
   const push = (id, when, title, body, tag, url) => {
     if (!when || !Number.isFinite(when.getTime()) || when.getTime() < staleBefore || when.getTime() >= horizonEnd) return;
