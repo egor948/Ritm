@@ -69,7 +69,8 @@ export function ring({ key, pct, size = 56, stroke = 8, color = 'blue', center, 
 const segPrev = new Map();
 export function seg({ key, options, value, onChange, cls = '' }) {
   const n = options.length;
-  const idx = Math.max(0, options.findIndex((o) => o.v === value));
+  let currentValue = value;
+  const idx = Math.max(0, options.findIndex((o) => o.v === currentValue));
   const prev = key != null && segPrev.has(key) ? segPrev.get(key) : idx;
   if (key != null) segPrev.set(key, idx);
   const el = h('div', { class: 'seg ' + cls, style: { '--n': n, '--i': prev } },
@@ -77,8 +78,10 @@ export function seg({ key, options, value, onChange, cls = '' }) {
     options.map((o, i) => h('button', {
       type: 'button', class: 'seg-btn' + (i === idx ? ' on' : ''),
       onclick: () => {
-        if (o.v === value) return;
+        if (o.v === currentValue) return;
+        currentValue = o.v;
         el.style.setProperty('--i', i);
+        if (key != null) segPrev.set(key, i);
         [...el.querySelectorAll('.seg-btn')].forEach((b, j) => b.classList.toggle('on', j === i));
         onChange(o.v);
       },
