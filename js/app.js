@@ -1,5 +1,5 @@
 // Точка входа: вкладки, перерисовка, тема, регистрация service worker, первый запуск.
-import { h, clear, debounce } from './util.js';
+import { h, clear, debounce, captureScrollPosition, restoreScrollPosition } from './util.js';
 import * as S from './store.js';
 import { ic, openSheet, hasOpenSheet, toast } from './ui.js';
 import { setNavHandler, view } from './nav.js';
@@ -52,6 +52,7 @@ const scrollMemo = {};
 function render({ enter = false } = {}) {
   const tab = TABS.find((t) => t.id === current);
   const old = root.querySelector('.scroll');
+  const oldScroll = old && !enter ? captureScrollPosition(old) : null;
   if (old && !enter) scrollMemo[current] = old.scrollTop;
   let el;
   try { el = tab.render(); } catch (e) { console.error(e); el = h('div', { class: 'empty' }, h('h3', null, 'Что-то пошло не так'), h('p', null, String(e.message || e))); }
@@ -61,8 +62,8 @@ function render({ enter = false } = {}) {
   root.dataset.tab = current;
   root.appendChild(el);
   const sc = el.querySelector('.scroll:not(.cal-scroll)');
-  if (sc && !enter && scrollMemo[current]) sc.scrollTop = scrollMemo[current];
   if (el.mount) el.mount();
+  if (sc && !enter) restoreScrollPosition(sc, oldScroll || { top: scrollMemo[current] || 0, anchor: null });
   if (enter) { scrollMemo[current] = 0; setTimeout(() => root.classList.remove('enter'), 900); }
 }
 
