@@ -181,7 +181,7 @@ export function editTask(task, defaults = {}) {
     draft,
     valid: (d) => (!d.title.trim() ? 'Введите название задачи' : changedDateIsPast(d.date, originalDate, dateWasChanged) ? 'Нельзя назначить задачу на прошедшую дату' : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем' : null),
     onSave: (d) => {
-      const out = { ...d, title: d.title.trim(), checklist: d.checklist.filter((c) => c.text.trim()) };
+      const out = { ...d, title: d.title.trim(), priority: Number(d.priority ?? 0), checklist: d.checklist.filter((c) => c.text.trim()) };
       out.reminders = (out.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time }));
       out.duration = null;
       // Старые поля больше не используются после миграции в массив.
@@ -226,12 +226,32 @@ export function editTask(task, defaults = {}) {
         groupTitle('Напоминания'),
         remindersGroup(d, redraw, d.date || todayStr()),
         groupTitle('Приоритет'),
-        group(h('div', { class: 'row' }, seg({ options: [{ v: 0, label: 'Нет' }, { v: 1, label: '!' }, { v: 2, label: '!!' }, { v: 3, label: '!!!' }], value: d.priority || 0, onChange: (v) => (d.priority = v) }))),
+        group(prioritySelector(d)),
         groupTitle('Чек-лист'),
         checklistGroup(d),
       );
     },
   });
+}
+
+function prioritySelector(d) {
+  const options = [{ value: 0, label: 'Нет' }, { value: 1, label: '!' }, { value: 2, label: '!!' }, { value: 3, label: '!!!' }];
+  const control = h('div', { class: 'priority-selector', role: 'group', 'aria-label': 'Приоритет задачи' });
+  const buttons = options.map((option) => h('button', {
+    type: 'button',
+    class: 'priority-option' + (Number(d.priority ?? 0) === option.value ? ' on' : ''),
+    'aria-pressed': Number(d.priority ?? 0) === option.value ? 'true' : 'false',
+    onclick: () => {
+      d.priority = option.value;
+      buttons.forEach((button, index) => {
+        const active = options[index].value === option.value;
+        button.classList.toggle('on', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+    },
+  }, option.label));
+  control.append(...buttons);
+  return control;
 }
 
 function checklistGroup(d) {
