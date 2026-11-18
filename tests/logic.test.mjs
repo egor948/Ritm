@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import * as L from '../js/logic.js';
 import * as U from '../js/util.js';
 import { filterCalendarEvents, DEFAULT_CALENDAR_ID } from '../js/calendars.js';
+import * as Store from '../js/store.js';
 
 const T = '2026-11-15'; // воскресенье
 const mkHabit = (o = {}) => ({ id: 'h1', title: 'Бег', type: 'check', schedule: { type: 'daily' }, startDate: '2026-10-01', ...o });
@@ -321,4 +322,9 @@ test('календарные папки фильтруют события по �
   assert.deepEqual(filterCalendarEvents(events, calendars, 'birthdays').map((event) => event.id), ['birthday']);
   assert.deepEqual(filterCalendarEvents(events, calendars, 'work'), []);
   assert.equal(events.length, 3);
+});
+
+test('в хранилище доступен базовый календарь для старых и новых событий', () => {
+  const data = Store.data();
+  assert.ok(data.calendars.some((calendar) => calendar.id === DEFAULT_CALENDAR_ID && calendar.isDefault));
 });
