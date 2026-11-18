@@ -1,7 +1,7 @@
 // Экран «Задачи»: умные списки, поиск, группировка по целям.
 import { h, todayStr, addDays, plural, clear } from './util.js';
 import * as S from './store.js';
-import { ic, cv, emptyState } from './ui.js';
+import { ic, cv, emptyState, actionSheet, toast } from './ui.js';
 import { screen, navBtn } from './shell.js';
 import { taskRow, goalColorOf, goalPath } from './components.js';
 import { editTask } from './editors.js';
@@ -11,7 +11,7 @@ import { isTaskInCompletionWindow } from './task-completion.js';
 export const FILTERS = [
   { v: 'today', label: 'Сегодня', icon: 'sun', color: 'blue' },
   { v: 'upcoming', label: 'План', icon: 'calendar', color: 'red' },
-  { v: 'inbox', label: 'Входящие', icon: 'inbox', color: 'indigo' },
+  { v: 'inbox', label: 'Без даты', icon: 'calendar', color: 'indigo' },
   { v: 'overdue', label: 'Просрочено', icon: 'flag', color: 'orange' },
   { v: 'all', label: 'Все', icon: 'list', color: 'green' },
   { v: 'done', label: 'Выполнено', icon: 'check', color: 'mint' },
@@ -57,7 +57,7 @@ export function tasksScreen() {
       listHost.appendChild(emptyState({
         emoji: query ? '🔍' : f === 'done' ? '🏁' : f === 'overdue' ? '🌤️' : '✅',
         title: query ? 'Ничего не найдено' : f === 'overdue' ? 'Всё вовремя' : f === 'done' ? 'Пока ничего не выполнено' : 'Здесь пусто',
-        text: query ? 'Попробуйте другой запрос.' : f === 'today' ? 'На сегодня задач нет. Добавьте новую или запланируйте из входящих.' : undefined,
+        text: query ? 'Попробуйте другой запрос.' : f === 'today' ? 'На сегодня задач нет. Добавьте новую или запланируйте задачи без даты.' : undefined,
         action: !query && f !== 'done' && f !== 'overdue' ? { label: 'Новая задача', onClick: () => editTask(null, f === 'today' ? { date: today } : {}) } : null,
       }));
       return;
@@ -87,7 +87,27 @@ export function tasksScreen() {
 
   return screen({
     id: 'tasks', title: 'Задачи', eyebrow: `${counts.today} на сегодня · ${counts.all} всего`,
-    actions: [navBtn('plus', 'Новая задача', () => editTask(null, f === 'today' ? { date: today } : {}))],
+    actions: [
+      ...(f === 'done' && counts.done > 0 ? [navBtn('trash', 'Очистить выполненные', () => {
+        const count = S.data().tasks.filter((t) => t.done).length;
+        if (!count) return;
+        actionSheet({
+          title: 'Очистить «Выполнено»?',
+          message: `Будут удалены все выполненные задачи (\u0024{count}), в том числе привязанные к целям. Прогресс таких целей пересчитается.`,
+          actions: [{
+            label: 'Удалить все выполненные',
+            danger: true,
+            onClick: () => {
+              const completed = S.data().tasks.filter((t) => t.done);
+              if (!completed.length) return;
+              S.applyChanges(completed.map((t) => ({ kind: 'tasks', rec: { ...t, deleted: true } })));
+              toast('Выполненные задачи удалены');
+            },
+          }],
+        });
+      })] : []),
+      navBtn('plus', 'Новая задача', () => editTask(null, f === 'today' ? { date: today } : {})),
+    ],
     children: [tiles, search, listHost],
   });
 }
