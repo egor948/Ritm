@@ -200,6 +200,15 @@ export function expandEvents(events, from, to) {
   }
   return out;
 }
+/**
+ * Проверяет, что независимое напоминание назначено на будущее по локальному времени.
+ * Сравнение строгое: текущая минута не считается будущим временем.
+ */
+export function isReminderInFuture(reminder, now = new Date()) {
+  if (!reminder || !reminder.date || !reminder.time) return false;
+  return localDate(reminder.date, reminder.time).getTime() > now.getTime();
+}
+
 const occurrence = (ev, date) => ({ type: 'event', id: ev.id, key: `${ev.id}@${date}`, date, ref: ev });
 
 // =====================================================================
