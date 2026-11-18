@@ -101,6 +101,9 @@ small { font-size: 12px; }
 .pressable { transition: transform 0.35s var(--spring); }
 .pressable:active { transform: scale(0.97); transition-duration: 0.12s; }
 
+/* На мобильном логотип боковой панели не занимает место в нижней навигации. */
+.sidebar-brand { display: none; }
+
 /* ---------- нижняя панель вкладок ---------- */
 .tabbar { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + 10px); width: min(calc(100% - 24px), 520px); height: 66px; padding: 6px; border-radius: 34px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; background: var(--glass); -webkit-backdrop-filter: saturate(190%) blur(30px); backdrop-filter: saturate(190%) blur(30px); box-shadow: var(--shadow), inset 0 0 0 0.5px var(--sep); }
 .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 28px; color: var(--label-2); transition: color 0.25s, background 0.3s; }
@@ -805,7 +808,7 @@ small { font-size: 12px; }
 
 
 /* ---------- адаптация для компьютера: постоянная боковая навигация ---------- */
-@media (min-width: 900px) {
+@media (min-width: 800px) and (hover: hover) and (pointer: fine) {
   :root { --sidebar-width: 252px; }
   #view { left: var(--sidebar-width); right: 0; width: auto; }
   #tabbar {
@@ -856,4 +859,12 @@ small { font-size: 12px; }
   .content.detail { padding-top: 16px; }
   .screen.fixed .nav.solid { padding: 16px 32px 10px; }
   .screen.fixed .fixed-body { min-width: 0; }
+}
+
+
+/* Desktop PWA: гарантируем, что рабочая область ужимается рядом с боковой панелью. */
+@media (min-width: 800px) and (hover: hover) and (pointer: fine) {
+  #view { min-width: 0; }
+  #tabbar { box-sizing: border-box; }
+  .sidebar-brand { display: flex; }
 }
