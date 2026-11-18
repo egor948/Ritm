@@ -134,7 +134,7 @@ export function withTaskSwipe(task, row, beforeDelete) {
 
   // Не даём завершившемуся свайпу открыть редактор обычным click-событием.
   shell.addEventListener('click', (e) => {
-    if (Date.now() < suppressClickUntil) {
+    if (Date.now() < suppressClickUntil && foreground.contains(e.target)) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
