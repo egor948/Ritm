@@ -329,15 +329,63 @@ export function textInput({ value = '', placeholder = '', onInput, big = false, 
   if (autofocus) setTimeout(() => el.focus(), 420);
   return el;
 }
+function formatDateValue(value) {
+  if (!value) return '';
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function openDateTimePicker({ title, type, value, onSave }) {
+  let draft = value || '';
+  openSheet({
+    title,
+    left: { label: 'Отмена' },
+    right: { label: 'Готово', bold: true, onClick: (api) => {
+      const selected = draft || null;
+      api.close(true);
+      onSave(selected);
+    } },
+    cls: 'value-picker',
+    build(api) {
+      const input = h('input', { class: 'inp dt picker-native', type, value: draft, onchange: (e) => { draft = e.target.value; } });
+      input.value = draft;
+      api.body.appendChild(h('div', { class: 'picker-content' }, input));
+    },
+  });
+}
+
 export function dateInput(value, onChange, { clearable = true } = {}) {
-  const inp = h('input', { class: 'inp dt', type: 'date', onchange: (e) => onChange(e.target.value || null) });
-  inp.value = value || '';
+  const inp = h('input', {
+    class: 'inp dt dt-trigger',
+    type: 'text',
+    readonly: true,
+    'aria-label': 'Выбрать дату',
+    onclick: () => openDateTimePicker({
+      title: 'Выбор даты',
+      type: 'date',
+      value: value || '',
+      onSave: (v) => { inp.value = formatDateValue(v); onChange(v); },
+    }),
+  });
+  inp.value = formatDateValue(value);
   const wrap = h('div', { class: 'dt-wrap' }, inp,
     clearable && value ? h('button', { type: 'button', class: 'mini-x', 'aria-label': 'Очистить', onclick: () => { inp.value = ''; onChange(null); wrap.querySelector('.mini-x').remove(); } }, ic('x', 14)) : null);
   return wrap;
 }
+
 export function timeInput(value, onChange, { clearable = true } = {}) {
-  const inp = h('input', { class: 'inp dt', type: 'time', onchange: (e) => onChange(e.target.value || null) });
+  const inp = h('input', {
+    class: 'inp dt dt-trigger',
+    type: 'text',
+    readonly: true,
+    'aria-label': 'Выбрать время',
+    onclick: () => openDateTimePicker({
+      title: 'Выбор времени',
+      type: 'time',
+      value: value || '',
+      onSave: (v) => { inp.value = v || ''; onChange(v); },
+    }),
+  });
   inp.value = value || '';
   const wrap = h('div', { class: 'dt-wrap' }, inp,
     clearable && value ? h('button', { type: 'button', class: 'mini-x', 'aria-label': 'Очистить', onclick: () => { inp.value = ''; onChange(null); wrap.querySelector('.mini-x').remove(); } }, ic('x', 14)) : null);
