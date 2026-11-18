@@ -130,10 +130,15 @@ export function openWidgetsEditor() {
           let scrollDelta = 0;
           if (latestY < bounds.top + 54) scrollDelta = -9;
           else if (latestY > bounds.bottom - 54) scrollDelta = 9;
-          if (scrollDelta) api.body.scrollTop = Math.max(0, api.body.scrollTop + scrollDelta);
+          let didScroll = false;
+          if (scrollDelta) {
+            const previousScrollTop = api.body.scrollTop;
+            api.body.scrollTop = Math.max(0, previousScrollTop + scrollDelta);
+            didScroll = api.body.scrollTop !== previousScrollTop;
+          }
 
           movePlaceholder(latestY);
-          if (scrollDelta) frameId = requestAnimationFrame(dragFrame);
+          if (didScroll) frameId = requestAnimationFrame(dragFrame);
         };
 
         const scheduleDragFrame = () => {
@@ -146,6 +151,7 @@ export function openWidgetsEditor() {
           const groupRect = widgetGroup.getBoundingClientRect();
           dragging = true;
           changed = false;
+          handle.setAttribute('aria-grabbed', 'true');
           grabOffsetY = startY - rect.top;
           api.body.dataset.scrollMode = 'free';
 
@@ -168,8 +174,13 @@ export function openWidgetsEditor() {
 
           // Отдельная визуальная карточка следует за пальцем и не ограничена overflow списка.
           preview = itemRow.cloneNode(true);
+          preview.classList.remove('drag-source');
           preview.classList.add('widget-drag-preview');
           preview.setAttribute('aria-hidden', 'true');
+          for (const property of ['position', 'left', 'top', 'width', 'height', 'margin', 'opacity']) {
+            preview.style.removeProperty(property);
+          }
+          preview.style.position = 'fixed';
           preview.style.left = rect.left + 'px';
           preview.style.top = rect.top + 'px';
           preview.style.width = rect.width + 'px';
