@@ -13,7 +13,7 @@ function closeOpenShell() {
 }
 
 export function withTaskSwipe(task, row, beforeDelete) {
-  const foreground = h('div', { class: 'task-swipe-foreground' }, row);
+  const foreground = h('div', { class: 'task-swipe-foreground', style: { background: 'var(--surface)' } }, row);
   const deleteButton = h('button', {
     type: 'button',
     class: 'task-swipe-delete',
@@ -24,7 +24,7 @@ export function withTaskSwipe(task, row, beforeDelete) {
       animateDelete();
     },
   }, ic('trash', 19), h('span', null, 'Удалить'));
-  const shell = h('div', { class: 'task-swipe-shell', 'data-task-swipe': task.id }, deleteButton, foreground);
+  const shell = h('div', { class: 'task-swipe-shell', style: { background: 'var(--surface)' }, 'data-task-swipe': task.id }, deleteButton, foreground);
 
   let isOpen = false;
   let pointer = null;
