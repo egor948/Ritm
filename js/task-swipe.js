@@ -3,7 +3,7 @@ import { h } from './util.js';
 import * as S from './store.js';
 import { ic, toast } from './ui.js';
 
-const ACTION_WIDTH = 96;
+const ACTION_WIDTH = 88;
 const DRAG_THRESHOLD = 8;
 const pendingRemoval = new Map();
 let openShell = null;
@@ -120,8 +120,14 @@ export function withTaskSwipe(task, row, beforeDelete) {
       return;
     }
     const width = shell.getBoundingClientRect().width || 320;
-    const maxOffset = Math.min(width * 0.72, 280);
-    const deleteThreshold = Math.min(maxOffset - 8, Math.max(150, width * 0.42));
+    const maxOffset = Math.min(width * 0.78, 300);
+    // Если кнопка уже была открыта, для полного удаления нужен дополнительный уверенный свайп.
+    const deleteThreshold = Math.min(
+      maxOffset - 8,
+      current.startOffset < 0
+        ? ACTION_WIDTH + Math.max(100, width * 0.28)
+        : Math.max(150, width * 0.42),
+    );
     if (current.offset <= -deleteThreshold) {
       animateDelete();
     } else {
