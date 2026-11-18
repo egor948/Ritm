@@ -104,7 +104,7 @@ export function taskRow(task, data, { showGoal = true, showDate = true, compact 
   if ((task.reminderMin != null && task.time) || task.remindAt) meta.push(h('span', { class: 'meta' }, ic('bell', 13)));
   const popNow = popId === task.id;
   if (popNow) popId = null;
-  return h('div', { class: 'task-row' + (task.done ? ' done' : '') + (compact ? ' compact' : '') + (isTaskExitStarted(task.id) ? ' task-completion-exit' : ''), 'data-task-id': task.id, 'data-scroll-anchor': `task:${task.id}`, onclick: () => editTask(task) },
+  return h('div', { class: 'task-row' + (task.done ? ' done' : '') + (compact ? ' compact' : '') + (task.done && isTaskExitStarted(task.id) ? ' task-completion-exit' : ''), 'data-task-id': task.id, 'data-task-done': task.done ? 'true' : 'false', 'data-scroll-anchor': `task:${task.id}`, onclick: () => editTask(task) },
     checkbox({ done: task.done, color, pop: popNow, onToggle: (d, el) => completeTask(task, d, el) }),
     h('div', { class: 'task-main' },
       h('div', { class: 'task-title' }, task.title),
