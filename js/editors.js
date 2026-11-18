@@ -1,6 +1,7 @@
 // Редакторы: задача, событие, привычка, цель + быстрое добавление и подтверждения.
 import { h, uid, todayStr, addDays, fromMin, toMin, ymd, localDate, clear, WD_SHORT, plural, captureScrollPosition, restoreScrollPosition } from './util.js';
 import * as S from './store.js';
+import { DEFAULT_CALENDAR_ID, calendarOptions } from './calendars.js';
 import { REPEAT_LABELS, isReminderInFuture, isDateNotPast } from './logic.js';
 import {
   openSheet, actionSheet, toast, ic, cv, group, groupTitle, groupNote, row, textInput, dateInput, timeInput, selectInput,
@@ -438,7 +439,7 @@ function eventRemindersGroup(d) {
 
 export function editEvent(ev, defaults = {}, occDate = null) {
   const isNew = !ev;
-  const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: 'blue', location: '', notes: '', reminderMin: null, reminders: [], repeat: { freq: 'none', interval: 1, days: [], until: null } };
+  const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: 'blue', calendarId: S.settings().calFilters?.calendarId || DEFAULT_CALENDAR_ID, location: '', notes: '', reminderMin: null, reminders: [], repeat: { freq: 'none', interval: 1, days: [], until: null } };
   const source = ev || defaults;
   const draft = ev ? { ...base, ...ev, reminders: eventReminderDraft(source), repeat: { ...base.repeat, ...(ev.repeat || {}) } } : { ...base, ...defaults, reminders: eventReminderDraft(source) };
   const originalDate = ev ? (ev.date || null) : null;
@@ -493,6 +494,8 @@ export function editEvent(ev, defaults = {}, occDate = null) {
           d.allDay ? row('Конец', dateInput(d.endDate, (v) => (d.endDate = v))) : null,
           !d.allDay ? row('Начало', timeInput(d.start, (v) => { d.start = v; if (v && (!d.end || toMin(d.end) <= toMin(v))) { d.end = fromMin(Math.min(1439, toMin(v) + 60)); endTimeControl.querySelector('input').value = d.end; } }, { clearable: false }), { icon: 'clock', iconColor: 'blue' }) : null,
           !d.allDay ? row('Конец', endTimeControl) : null),
+        groupTitle('Календарь'),
+        group(row('Календарь', selectInput(calendarOptions(S.data().calendars), d.calendarId || DEFAULT_CALENDAR_ID, (v) => { d.calendarId = v; }), { icon: 'calendar', iconColor: 'red' })),
         groupTitle('Повтор'),
         group(
           row('Повтор', selectInput(Object.entries(REPEAT_LABELS).map(([v, label]) => ({ v, label })), r.freq || 'none', (v) => { r.freq = v; if (v === 'weekly' && (!r.days || !r.days.length)) r.days = []; redraw(); }), { icon: 'repeat', iconColor: 'green' }),
