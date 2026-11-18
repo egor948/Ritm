@@ -9,7 +9,6 @@ import {
 
 const CATEGORIES = ['Здоровье', 'Карьера', 'Обучение', 'Финансы', 'Отношения', 'Личное'];
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
-const DURATIONS = [15, 30, 45, 60, 90, 120, 180, 240].map((m) => ({ v: m, label: m < 60 ? `${m} мин` : m % 60 ? `${Math.floor(m / 60)} ч ${m % 60} мин` : `${m / 60} ч` }));
 
 export function goalOptions(data, { allowNone = true, noneLabel = 'Без цели' } = {}) {
   const opts = allowNone ? [{ v: null, label: noneLabel }] : [];
@@ -112,7 +111,8 @@ export function editTask(task, defaults = {}) {
   const isNew = !task;
   const draft = task
     ? { ...task, reminders: legacyTaskReminders(task), checklist: (task.checklist || []).map((c) => ({ ...c })) }
-    : { title: '', notes: '', goalId: null, date: null, time: null, duration: 30, done: false, priority: 0, weight: 1, reminderMin: null, remindAt: null, reminders: [], checklist: [], ...defaults };
+    : { title: '', notes: '', goalId: null, date: null, time: null, done: false, priority: 0, weight: 1, reminderMin: null, remindAt: null, reminders: [], checklist: [], ...defaults };
+  delete draft.duration;
   const goalMode = () => { const g = data.goals.find((x) => x.id === draft.goalId); if (!g) return null; const p = g.parentId && data.goals.find((x) => x.id === g.parentId); return (p && (p.progressMode === 'weight' || g.progressMode === 'weight')) || g.progressMode === 'weight' ? 'weight' : null; };
 
   return editorShell({
@@ -122,6 +122,7 @@ export function editTask(task, defaults = {}) {
     onSave: (d) => {
       const out = { ...d, title: d.title.trim(), checklist: d.checklist.filter((c) => c.text.trim()) };
       out.reminders = (out.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time }));
+      out.duration = null;
       // Старые поля больше не используются после миграции в массив.
       out.reminderMin = null; out.remindAt = null;
       S.upsert('tasks', out);
@@ -133,10 +134,8 @@ export function editTask(task, defaults = {}) {
     },
     draw(body, d, redraw) {
       const titleInp = textInput({ value: d.title, placeholder: 'Что нужно сделать?', big: true, onInput: (v) => (d.title = v), autofocus: isNew });
-      const taskTimeRow = row('Время', timeInput(d.time, (v) => { d.time = v; taskDurationRow.style.display = d.date && d.time ? '' : 'none'; }), { icon: 'clock', iconColor: 'blue' });
-      const taskDurationRow = row('Длительность', selectInput(DURATIONS, d.duration || 30, (v) => (d.duration = v)), { icon: 'clock', iconColor: 'indigo' });
+      const taskTimeRow = row('Время', timeInput(d.time, (v) => { d.time = v; }), { icon: 'clock', iconColor: 'blue' });
       taskTimeRow.style.display = d.date ? '' : 'none';
-      taskDurationRow.style.display = d.date && d.time ? '' : 'none';
       body.append(
         group(h('div', { class: 'row solo' }, titleInp)),
         group(h('div', { class: 'row solo' }, textInput({ value: d.notes, placeholder: 'Заметки', multiline: true, onInput: (v) => (d.notes = v) }))),
@@ -150,9 +149,8 @@ export function editTask(task, defaults = {}) {
             value: d.date === todayStr() ? 'today' : d.date === addDays(todayStr(), 1) ? 'tomorrow' : d.date === addDays(todayStr(), 7) ? 'week' : !d.date ? 'none' : null,
             onChange: (v) => { d.date = v === 'today' ? todayStr() : v === 'tomorrow' ? addDays(todayStr(), 1) : v === 'week' ? addDays(todayStr(), 7) : null; redraw(); },
           })),
-          row('Дата', dateInput(d.date, (v) => { d.date = v; taskTimeRow.style.display = d.date ? '' : 'none'; taskDurationRow.style.display = d.date && d.time ? '' : 'none'; }), { icon: 'calendar', iconColor: 'red' }),
+          row('Дата', dateInput(d.date, (v) => { d.date = v; taskTimeRow.style.display = d.date ? '' : 'none'; }), { icon: 'calendar', iconColor: 'red' }),
           taskTimeRow,
-          taskDurationRow,
           ),
         groupTitle('Напоминания'),
         remindersGroup(d, redraw, d.date || todayStr()),
