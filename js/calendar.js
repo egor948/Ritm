@@ -296,13 +296,15 @@ function openFilters() {
 
 function header(mode, date) {
   const t = titleFor(mode, date);
+  const activeCalendarId = filtersOf().calendarId;
+  const activeCalendar = activeCalendarId && S.data().calendars.find((calendar) => calendar.id === activeCalendarId);
   return h('div', { class: 'cal-head' },
     h('div', { class: 'cal-top' },
-      h('button', { class: 'cal-title', onclick: pickDate }, h('b', null, t.main), h('small', null, t.sub)),
+      h('button', { class: 'cal-title', onclick: pickDate }, h('b', null, t.main), h('small', null, t.sub), activeCalendar ? h('small', { class: 'cal-selected-label' }, activeCalendar.name) : null),
       h('div', { class: 'nav-actions' },
         h('button', { class: 'nav-btn', 'aria-label': 'Назад', onclick: () => shift(mode, -1) }, ic('chevL', 22)),
         h('button', { class: 'nav-btn', 'aria-label': 'Вперёд', onclick: () => shift(mode, 1) }, ic('chevR', 22)),
-        navBtn('calendar', 'Календари', () => openCalendarManager(openFilters)),
+        navBtn('calendar', 'Календари', () => openCalendarManager(openFilters, (id) => { view.calDate = todayStr(); agendaDays = id ? 365 : 30; })),
         navBtn('plus', 'Добавить', () => quickAdd({ date })))),
     h('div', { class: 'cal-ctl' },
       seg({ key: 'cal-mode', cls: 'small', options: [{ v: 'day', label: 'День' }, { v: 'week', label: 'Неделя' }, { v: 'month', label: 'Месяц' }, { v: 'year', label: 'Год' }, { v: 'agenda', label: 'Список' }], value: mode, onChange: setMode }),
