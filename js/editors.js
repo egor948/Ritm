@@ -68,6 +68,10 @@ function changedReminderIsPast(reminders, original) {
   });
 }
 
+function changedDateIsPast(date, originalDate) {
+  return Boolean(date && date < todayStr() && date !== originalDate);
+}
+
 // Несколько независимых напоминаний с собственными датой и временем.
 function remindersGroup(d, redraw, defaultDate) {
   if (!Array.isArray(d.reminders)) d.reminders = [];
@@ -166,6 +170,7 @@ export function editTask(task, defaults = {}) {
     ? { ...task, reminders: legacyTaskReminders(task), checklist: (task.checklist || []).map((c) => ({ ...c })) }
     : { title: '', notes: '', goalId: null, date: null, time: null, done: false, priority: 0, weight: 1, reminderMin: null, remindAt: null, reminders: [], checklist: [], ...defaults };
   delete draft.duration;
+  const originalDate = task ? (task.date || null) : null;
   draft.reminders = (draft.reminders || []).map((r) => ({ ...r, id: r.id || uid() }));
   const originalReminders = reminderSnapshot(draft.reminders);
   const goalMode = () => { const g = data.goals.find((x) => x.id === draft.goalId); if (!g) return null; const p = g.parentId && data.goals.find((x) => x.id === g.parentId); return (p && (p.progressMode === 'weight' || g.progressMode === 'weight')) || g.progressMode === 'weight' ? 'weight' : null; };
@@ -173,7 +178,7 @@ export function editTask(task, defaults = {}) {
   return editorShell({
     title: isNew ? 'Новая задача' : 'Задача',
     draft,
-    valid: (d) => (!d.title.trim() ? 'Введите название задачи' : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем' : null),
+    valid: (d) => (!d.title.trim() ? 'Введите название задачи' : changedDateIsPast(d.date, originalDate) ? 'Нельзя назначить задачу на прошедшую дату' : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем' : null),
     onSave: (d) => {
       const out = { ...d, title: d.title.trim(), checklist: d.checklist.filter((c) => c.text.trim()) };
       out.reminders = (out.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time }));
@@ -189,6 +194,15 @@ export function editTask(task, defaults = {}) {
     },
     draw(body, d, redraw) {
       const titleInp = textInput({ value: d.title, placeholder: 'Что нужно сделать?', big: true, onInput: (v) => (d.title = v), autofocus: isNew });
+      const taskDateControl = dateInput(d.date, (v) => {
+        if (changedDateIsPast(v, originalDate)) {
+          taskDateControl.querySelector('input').value = d.date || '';
+          toast('Нельзя назначить задачу на прошедшую дату');
+          return;
+        }
+        d.date = v;
+        taskTimeRow.style.display = d.date ? '' : 'none';
+      }, { min: todayStr() });
       const taskTimeRow = row('Время', timeInput(d.time, (v) => { d.time = v; }), { icon: 'clock', iconColor: 'blue' });
       taskTimeRow.style.display = d.date ? '' : 'none';
       body.append(
@@ -204,7 +218,7 @@ export function editTask(task, defaults = {}) {
             value: d.date === todayStr() ? 'today' : d.date === addDays(todayStr(), 1) ? 'tomorrow' : d.date === addDays(todayStr(), 7) ? 'week' : !d.date ? 'none' : null,
             onChange: (v) => { d.date = v === 'today' ? todayStr() : v === 'tomorrow' ? addDays(todayStr(), 1) : v === 'week' ? addDays(todayStr(), 7) : null; redraw(); },
           })),
-          row('Дата', dateInput(d.date, (v) => { d.date = v; taskTimeRow.style.display = d.date ? '' : 'none'; }), { icon: 'calendar', iconColor: 'red' }),
+          row('Дата', taskDateControl, { icon: 'calendar', iconColor: 'red' }),
           taskTimeRow,
           ),
         groupTitle('Напоминания'),
@@ -285,6 +299,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
   const isNew = !ev;
   const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: 'blue', location: '', notes: '', reminderMin: null, reminders: [], repeat: { freq: 'none', interval: 1, days: [], until: null } };
   const draft = ev ? { ...base, ...ev, reminders: (ev.reminders || []).map((r) => ({ ...r })), repeat: { ...base.repeat, ...(ev.repeat || {}) } } : { ...base, ...defaults, reminders: (defaults.reminders || []).map((r) => ({ ...r })) };
+  const originalDate = ev ? (ev.date || null) : null;
   draft.reminders = (draft.reminders || []).map((r) => ({ ...r, id: r.id || uid() }));
   const originalReminders = reminderSnapshot(draft.reminders);
   const data = S.data();
@@ -293,7 +308,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
   return editorShell({
     title: isNew ? 'Новое событие' : 'Событие',
     draft,
-    valid: (d) => (!d.title.trim() ? 'Введите название события' : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем' : !d.allDay && d.end && d.start && toMin(d.end) <= toMin(d.start) ? 'Время окончания должно быть позже начала' : null),
+    valid: (d) => (!d.title.trim() ? 'Введите название события' : changedDateIsPast(d.date, originalDate) ? 'Нельзя назначить мероприятие на прошедшую дату' : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем' : !d.allDay && d.end && d.start && toMin(d.end) <= toMin(d.start) ? 'Время окончания должно быть позже начала' : null),
     onSave: (d) => {
       const out = { ...d, title: d.title.trim(), reminders: (d.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time })) };
       if (out.allDay) { out.start = null; out.end = null; if (out.endDate && out.endDate <= out.date) out.endDate = null; } else out.endDate = null;
@@ -320,12 +335,21 @@ export function editEvent(ev, defaults = {}, occDate = null) {
     draw(body, d, redraw) {
       const r = d.repeat;
       const endTimeControl = timeInput(d.end, (v) => (d.end = v), { clearable: false });
+      const eventDateControl = dateInput(d.date, (v) => {
+        const nextDate = v || todayStr();
+        if (changedDateIsPast(nextDate, originalDate)) {
+          eventDateControl.querySelector('input').value = d.date || todayStr();
+          toast('Нельзя назначить мероприятие на прошедшую дату');
+          return;
+        }
+        d.date = nextDate;
+      }, { clearable: false, min: todayStr() });
       body.append(
         group(h('div', { class: 'row solo' }, textInput({ value: d.title, placeholder: 'Название', big: true, onInput: (v) => (d.title = v), autofocus: isNew })),
           h('div', { class: 'row solo' }, textInput({ value: d.location, placeholder: 'Место', onInput: (v) => (d.location = v) }))),
         group(
           row('Весь день', toggle(d.allDay, (v) => { d.allDay = v; redraw(); }), { icon: 'sun', iconColor: 'orange' }),
-          row(d.allDay ? 'Начало' : 'Дата', dateInput(d.date, (v) => { d.date = v || todayStr(); }, { clearable: false }), { icon: 'calendar', iconColor: 'red' }),
+          row(d.allDay ? 'Начало' : 'Дата', eventDateControl, { icon: 'calendar', iconColor: 'red' }),
           d.allDay ? row('Конец', dateInput(d.endDate, (v) => (d.endDate = v))) : null,
           !d.allDay ? row('Начало', timeInput(d.start, (v) => { d.start = v; if (v && (!d.end || toMin(d.end) <= toMin(v))) { d.end = fromMin(Math.min(1439, toMin(v) + 60)); endTimeControl.querySelector('input').value = d.end; } }, { clearable: false }), { icon: 'clock', iconColor: 'blue' }) : null,
           !d.allDay ? row('Конец', endTimeControl) : null),
