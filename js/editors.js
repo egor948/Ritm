@@ -120,7 +120,7 @@ function remindersGroup(d, redraw, defaultDate) {
 
     const card = h('div', { class: 'reminder-card', 'data-scroll-anchor': `reminder:${reminder.id}` },
       h('div', { class: 'reminder-card-head' },
-        h('div', { class: 'reminder-card-title' }, h('span', {}, 'Напоминание')),
+        h('div', { class: 'reminder-card-title' }, h('span', {}, 'Напомнить за')),
         h('button', { type: 'button', class: 'reminder-remove', 'aria-label': 'Удалить напоминание', onclick: () => {
           const index = d.reminders.findIndex((item) => item.id === reminder.id);
           if (index < 0) return;
@@ -416,9 +416,7 @@ function eventRemindersGroup(d) {
           d.reminders.splice(index, 1);
           card.remove();
         } }, ic('x', 15))),
-      h('div', { class: 'reminder-fields reminder-relative-fields' },
-        h('label', { class: 'reminder-field' }, h('span', {}, 'Единица времени'), unit),
-        h('label', { class: 'reminder-field' }, h('span', {}, 'Количество'), amount)));
+      h('div', { class: 'reminder-fields reminder-relative-fields' }, unit, amount));
     return card;
   };
 
