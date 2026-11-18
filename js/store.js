@@ -356,7 +356,7 @@ export function applyRemote(rows) {
       changed++;
     }
   }
-  if (changed) commit();
+  if (changed) { ensureCalendarState(state); commit(); }
   return changed;
 }
 
