@@ -439,7 +439,9 @@ function eventRemindersGroup(d) {
 
 export function editEvent(ev, defaults = {}, occDate = null) {
   const isNew = !ev;
-  const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: 'blue', calendarId: S.settings().calFilters?.calendarId || DEFAULT_CALENDAR_ID, location: '', notes: '', reminderMin: null, reminders: [], repeat: { freq: 'none', interval: 1, days: [], until: null } };
+  const defaultCalendarId = S.settings().calFilters?.calendarId || DEFAULT_CALENDAR_ID;
+  const defaultCalendar = S.data().calendars.find((calendar) => calendar.id === defaultCalendarId);
+  const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: defaultCalendar?.color || 'blue', calendarId: defaultCalendarId, location: '', notes: '', reminderMin: null, reminders: [], repeat: { freq: 'none', interval: 1, days: [], until: null } };
   const source = ev || defaults;
   const draft = ev ? { ...base, ...ev, reminders: eventReminderDraft(source), repeat: { ...base.repeat, ...(ev.repeat || {}) } } : { ...base, ...defaults, reminders: eventReminderDraft(source) };
   const originalDate = ev ? (ev.date || null) : null;
