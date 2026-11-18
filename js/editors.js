@@ -48,13 +48,6 @@ function remindersGroup(d, redraw, defaultDate) {
   const list = h('div', { class: 'reminder-list' });
   let addButton;
 
-  const updateLabels = () => {
-    list.querySelectorAll('.reminder-card').forEach((card, i) => {
-      const label = card.querySelector('.reminder-card-title span');
-      if (label) label.textContent = `Напоминание ${i + 1}`;
-    });
-  };
-
   const makeCard = (reminder) => {
     reminder.id = reminder.id || uid();
     reminder.date = reminder.date || defaultDate || todayStr();
@@ -77,7 +70,6 @@ function remindersGroup(d, redraw, defaultDate) {
           if (index < 0) return;
           d.reminders.splice(index, 1);
           card.remove();
-          updateLabels();
         } }, ic('x', 15))),
       h('div', { class: 'reminder-fields' },
         h('label', { class: 'reminder-field' }, h('span', {}, 'Дата'), date),
@@ -93,7 +85,6 @@ function remindersGroup(d, redraw, defaultDate) {
       const reminder = { id: uid(), date: defaultDate || todayStr(), time: '09:00' };
       d.reminders.push(reminder);
       list.insertBefore(makeCard(reminder), addButton);
-      updateLabels();
     },
   }, ic('plus', 17), 'Добавить напоминание');
   list.appendChild(addButton);
