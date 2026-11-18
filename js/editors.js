@@ -1,5 +1,5 @@
 // Редакторы: задача, событие, привычка, цель + быстрое добавление и подтверждения.
-import { h, uid, todayStr, addDays, fromMin, toMin, clear, WD_SHORT, plural } from './util.js';
+import { h, uid, todayStr, addDays, fromMin, toMin, clear, WD_SHORT, plural, captureScrollPosition, restoreScrollPosition } from './util.js';
 import * as S from './store.js';
 import { REMINDER_OPTIONS, REPEAT_LABELS } from './logic.js';
 import {
@@ -30,12 +30,12 @@ function editorShell({ title, draft, draw, onSave, onDelete, deleteLabel = 'Уд
     right: { label: 'Готово', bold: true, onClick: (api) => { const err = valid && valid(draft); if (err) { toast(err); return; } onSave(draft); api.close(true); } },
     build(api) {
       const redraw = () => {
-        const sc = api.body.scrollTop;
+        const scroll = captureScrollPosition(api.body);
         clear(api.body);
         draw(api.body, draft, redraw, api);
         if (onDelete) api.body.appendChild(h('div', { class: 'group' }, h('button', { class: 'row-btn danger', onclick: () => onDelete(api) }, deleteLabel)));
         api.body.appendChild(h('div', { class: 'sheet-pad' }));
-        api.body.scrollTop = sc;
+        restoreScrollPosition(api.body, scroll);
       };
       redraw();
     },
@@ -48,6 +48,7 @@ function remindersGroup(d, redraw, defaultDate) {
   const list = h('div', { class: 'reminder-list' });
   d.reminders.forEach((reminder, i) => {
     // Дата и время обязательны: пустое значение сразу восстанавливается.
+    reminder.id = reminder.id || uid();
     reminder.date = reminder.date || defaultDate || todayStr();
     reminder.time = reminder.time || '09:00';
     const date = dateInput(reminder.date, (v) => {
@@ -58,7 +59,7 @@ function remindersGroup(d, redraw, defaultDate) {
       if (v) reminder.time = v;
       else redraw();
     }, { clearable: false });
-    list.appendChild(h('div', { class: 'reminder-card' },
+    list.appendChild(h('div', { class: 'reminder-card', 'data-scroll-anchor': `reminder:${reminder.id}` },
       h('div', { class: 'reminder-card-head' },
         h('div', { class: 'reminder-card-title' }, ic('bell', 16), h('span', {}, `Напоминание ${i + 1}`)),
         h('button', { type: 'button', class: 'reminder-remove', onclick: () => { d.reminders.splice(i, 1); redraw(); }, 'aria-label': 'Удалить напоминание' }, ic('x', 15))),
@@ -138,29 +139,52 @@ export function editTask(task, defaults = {}) {
         groupTitle('Приоритет'),
         group(h('div', { class: 'row' }, seg({ options: [{ v: 0, label: 'Нет' }, { v: 1, label: '!' }, { v: 2, label: '!!' }, { v: 3, label: '!!!' }], value: d.priority || 0, onChange: (v) => (d.priority = v) }))),
         groupTitle('Чек-лист'),
-        checklistGroup(d, redraw),
+        checklistGroup(d, redraw, body),
       );
     },
   });
 }
 
-function checklistGroup(d, redraw) {
+function checklistGroup(d, redraw, body) {
   const g = h('div', { class: 'group' });
+  const focusItem = (id) => setTimeout(() => {
+    const input = body.querySelector(`[data-check-id="${id}"] .inp`);
+    if (input) input.focus({ preventScroll: true });
+  }, 30);
   d.checklist.forEach((c, i) => {
+    c.id = c.id || uid();
     const inp = textInput({ value: c.text, placeholder: 'Пункт', onInput: (v) => (c.text = v) });
-    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); d.checklist.splice(i + 1, 0, { id: uid(), text: '', done: false }); redraw(); } });
-    g.appendChild(h('div', { class: 'row check-row' },
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const next = { id: uid(), text: '', done: false };
+        d.checklist.splice(i + 1, 0, next);
+        redraw();
+        focusItem(next.id);
+      }
+    });
+    g.appendChild(h('div', {
+      class: 'row check-row',
+      'data-check-id': c.id,
+      'data-scroll-anchor': `checklist:${c.id}`,
+    },
       h('button', { type: 'button', class: 'mini-chk' + (c.done ? ' on' : ''), onclick: (e) => { c.done = !c.done; e.currentTarget.classList.toggle('on', c.done); } }, ic('check', 14)),
       h('div', { class: 'row-label grow' }, inp),
       h('button', { type: 'button', class: 'mini-x vis', onclick: () => { d.checklist.splice(i, 1); redraw(); }, 'aria-label': 'Удалить пункт' }, ic('x', 14))));
   });
-  g.appendChild(h('button', { type: 'button', class: 'row-btn', onclick: () => { d.checklist.push({ id: uid(), text: '', done: false }); redraw(); setTimeout(() => { const ins = document.querySelectorAll('.sheet .check-row .inp'); ins[ins.length - 1] && ins[ins.length - 1].focus(); }, 30); } }, ic('plus', 18), ' Добавить пункт'));
+  g.appendChild(h('button', {
+    type: 'button',
+    class: 'row-btn',
+    onclick: () => {
+      const item = { id: uid(), text: '', done: false };
+      d.checklist.push(item);
+      redraw();
+      focusItem(item.id);
+    },
+  }, ic('plus', 18), ' Добавить пункт'));
   return g;
 }
 
-// =====================================================================
-// Событие
-// =====================================================================
 export function editEvent(ev, defaults = {}, occDate = null) {
   const isNew = !ev;
   const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: 'blue', location: '', notes: '', reminderMin: null, reminders: [], repeat: { freq: 'none', interval: 1, days: [], until: null } };
