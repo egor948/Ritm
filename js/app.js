@@ -25,6 +25,24 @@ let current = 'today';
 const root = document.getElementById('view');
 const tabbar = document.getElementById('tabbar');
 
+const INSTALL_GUIDE_KEY = 'rhythm.install-guide.seen.v1';
+let deferredInstallPrompt = null;
+let installBanner = null;
+let installActionArea = null;
+let welcomeVisible = false;
+let installGuideAttempted = false;
+
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  updateInstallAction();
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  try { localStorage.setItem(INSTALL_GUIDE_KEY, '1'); } catch (_) { /* ok */ }
+  closeInstallHint();
+});
+
 function buildTabbar() {
   clear(tabbar);
   tabbar.appendChild(h('div', { class: 'sidebar-brand', 'aria-label': 'Ритм' },
@@ -101,8 +119,13 @@ function welcome() {
   const d = S.raw();
   const empty = !d.goals.length && !d.tasks.length && !d.events.length && !d.habits.length;
   if (S.settings().onboarded || !empty) return;
+  welcomeVisible = true;
   openSheet({
-    title: '', left: null, cls: 'welcome', onClose: () => S.setSettings({ onboarded: true }),
+    title: '', left: null, cls: 'welcome', onClose: () => {
+      welcomeVisible = false;
+      S.setSettings({ onboarded: true });
+      setTimeout(installHint, 450);
+    },
     build(api) {
       const feat = (icon, c, t, s) => h('div', { class: 'wl-feat', style: { '--c': `var(--c-${c})` } }, h('span', null, ic(icon, 22)), h('div', null, h('b', null, t), h('small', null, s)));
       api.body.append(
@@ -120,17 +143,119 @@ function welcome() {
   });
 }
 
-// ---------- подсказка по установке (iPhone, Safari, не в режиме приложения) ----------
+// ---------- одноразовая инструкция установки PWA ----------
+
+function closeInstallHint() {
+  if (installBanner) installBanner.remove();
+  installBanner = null;
+  installActionArea = null;
+}
+
+async function triggerInstallPrompt() {
+  const promptEvent = deferredInstallPrompt;
+  if (!promptEvent) return;
+  deferredInstallPrompt = null;
+  const button = installActionArea && installActionArea.querySelector('button');
+  if (button) button.disabled = true;
+  try {
+    await promptEvent.prompt();
+    const choice = await promptEvent.userChoice;
+    if (choice && choice.outcome === 'accepted') {
+      closeInstallHint();
+      return;
+    }
+  } catch (error) {
+    console.warn('PWA install prompt', error);
+  }
+  closeInstallHint();
+}
+
+function updateInstallAction() {
+  if (!installBanner || !installActionArea || !deferredInstallPrompt || installActionArea.querySelector('button')) return;
+  installActionArea.appendChild(h('button', {
+    type: 'button',
+    class: 'install-action',
+    onclick: triggerInstallPrompt,
+  }, 'Установить'));
+}
+
+function installInstructions() {
+  const ua = navigator.userAgent || '';
+  const ios = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  const android = /Android/i.test(ua);
+  const mobile = Boolean(navigator.userAgentData && navigator.userAgentData.mobile)
+    || ios || android || /Mobile|IEMobile|Opera Mini/i.test(ua);
+  const yandex = /YaBrowser/i.test(ua);
+  const safariMac = !mobile && /Macintosh/i.test(ua) && /Safari/i.test(ua)
+    && !/(Chrome|Chromium|CriOS|Edg|YaBrowser|Firefox)/i.test(ua);
+  const chromium = /(Chrome|Chromium|CriOS|Edg|YaBrowser|OPR)/i.test(ua);
+
+  if (ios) {
+    return {
+      title: 'Добавьте «Ритм» на экран «Домой»',
+      text: 'Нажмите «Поделиться» → «На экран Домой» → «Добавить». Если доступен пункт «Открывать как веб‑приложение», включите его.',
+    };
+  }
+  if (android) {
+    return {
+      title: 'Установите «Ритм» на телефон',
+      text: 'Откройте меню браузера ⋮ и выберите «Установить приложение» или «Добавить на главный экран».',
+    };
+  }
+  if (yandex) {
+    return {
+      title: 'Установите «Ритм» на компьютер',
+      text: 'В Умной строке нажмите значок справа → «Установить как приложение». Можно выбрать отдельное окно и добавить ярлык.',
+    };
+  }
+  if (safariMac) {
+    return {
+      title: 'Добавьте «Ритм» в Dock',
+      text: 'В Safari откройте меню «Файл» → «Добавить в Dock». Эта возможность есть в Safari на macOS Sonoma и новее.',
+    };
+  }
+  if (chromium) {
+    return {
+      title: 'Установите «Ритм» на компьютер',
+      text: 'Нажмите значок установки справа от адресной строки или откройте меню браузера → «Установить приложение».',
+    };
+  }
+  return {
+    title: 'Установите «Ритм» как приложение',
+    text: 'Откройте сайт в Chrome, Edge или Яндекс Браузере и выберите в меню браузера установку приложения.',
+  };
+}
+
 function installHint() {
-  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-  let dismissed = false;
-  try { dismissed = localStorage.getItem('rhythm.hint') === '1'; } catch (_) { /* ok */ }
-  if (!ios || standalone || dismissed) return;
-  const bar = h('div', { class: 'install' },
-    h('div', null, h('b', null, 'Установите «Ритм»'), h('span', null, 'Нажмите «Поделиться» ', h('i', { class: 'ios-share' }, '⎙'), ' → «На экран “Домой”» — приложение откроется на весь экран и сможет присылать напоминания.')),
-    h('button', { 'aria-label': 'Закрыть', onclick: () => { bar.remove(); try { localStorage.setItem('rhythm.hint', '1'); } catch (_) { /* ok */ } } }, ic('x', 18)));
-  document.getElementById('toasts').before(bar);
+  if (installBanner || installGuideAttempted) return;
+  const standalone = ['standalone', 'fullscreen', 'minimal-ui', 'window-controls-overlay']
+    .some((mode) => window.matchMedia && window.matchMedia(`(display-mode: ${mode})`).matches)
+    || navigator.standalone === true;
+  if (standalone) return;
+
+  let seen = false;
+  try {
+    seen = localStorage.getItem(INSTALL_GUIDE_KEY) === '1'
+      || localStorage.getItem('rhythm.hint') === '1';
+    if (!seen) localStorage.setItem(INSTALL_GUIDE_KEY, '1');
+  } catch (_) { /* private browsing: keep the once-per-page guard */ }
+  if (seen) return;
+  installGuideAttempted = true;
+
+  const guide = installInstructions();
+  const copy = h('div', { class: 'install-copy' },
+    h('b', null, guide.title),
+    h('span', null, guide.text));
+  installActionArea = h('div', { class: 'install-actions' });
+  const dismiss = h('button', {
+    type: 'button',
+    class: 'install-dismiss',
+    'aria-label': 'Понятно, закрыть инструкцию',
+    onclick: closeInstallHint,
+  }, ic('x', 18));
+  installBanner = h('div', { class: 'install' }, copy, installActionArea, dismiss);
+  document.getElementById('toasts').before(installBanner);
+  updateInstallAction();
 }
 
 // ---------- запуск ----------
@@ -141,7 +266,7 @@ current = TABS.some((t) => t.id === start) ? start : 'today';
 markTab();
 render({ enter: true });
 setTimeout(welcome, 350);
-setTimeout(installHint, 1200);
+setTimeout(() => { if (!welcomeVisible) installHint(); }, 1600);
 if (Sync.configured()) {
   // Завершаем OAuth callback до запуска фоновой синхронизации.
   Sync.handleOAuthCallback()
