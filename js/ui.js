@@ -163,8 +163,7 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
   let closed = false;
   let stableBodyScrollTop = body.scrollTop;
   let pointerScrollTop = null;
-  let restoreTimer1 = null;
-  let restoreTimer2 = null;
+  let restoreTimers = [];
   let restoringScroll = false;
   let scrollObserver = null;
 
@@ -179,24 +178,32 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
       apply();
       requestAnimationFrame(apply);
     });
-    clearTimeout(restoreTimer1);
-    clearTimeout(restoreTimer2);
-    restoreTimer1 = setTimeout(apply, 90);
-    restoreTimer2 = setTimeout(() => {
+    for (const timer of restoreTimers) clearTimeout(timer);
+    restoreTimers = [0, 60, 180, 360, 650, 900].map((delay, index) => setTimeout(() => {
       apply();
-      restoringScroll = false;
-      pointerScrollTop = null;
-    }, 320);
+      if (index === 5) {
+        restoringScroll = false;
+        pointerScrollTop = null;
+      }
+    }, delay));
   };
 
   const rememberBodyPosition = () => {
     if (!restoringScroll && pointerScrollTop == null) stableBodyScrollTop = body.scrollTop;
   };
-  const onBodyPointerDown = (event) => {
-    if (event.target.closest && event.target.closest('button')) {
-      pointerScrollTop = body.scrollTop;
-      stableBodyScrollTop = pointerScrollTop;
+  const rememberButtonPress = (event) => {
+    const button = event.target.closest && event.target.closest('button');
+    if (!button) {
+      // A new gesture on the scroll area means the user intentionally wants to scroll.
+      pointerScrollTop = null;
+      restoringScroll = false;
+      for (const timer of restoreTimers) clearTimeout(timer);
+      restoreTimers = [];
+      stableBodyScrollTop = body.scrollTop;
+      return;
     }
+    pointerScrollTop = body.scrollTop;
+    stableBodyScrollTop = pointerScrollTop;
   };
   const onBodyClickCapture = (event) => {
     if (pointerScrollTop == null) return;
@@ -219,7 +226,7 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
       sheet.style.transform = '';
       if (window.visualViewport) { window.visualViewport.removeEventListener('resize', fit); window.visualViewport.removeEventListener('scroll', fit); }
       body.removeEventListener('scroll', rememberBodyPosition);
-      body.removeEventListener('pointerdown', onBodyPointerDown, true);
+      body.removeEventListener('pointerdown', rememberButtonPress, true);\n      body.removeEventListener('touchstart', rememberButtonPress, true);
       body.removeEventListener('click', onBodyClickCapture, true);
       if (scrollObserver) scrollObserver.disconnect();
       clearTimeout(restoreTimer1);
@@ -275,7 +282,7 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
 
   // Keep the editor's own scroll container stable across iOS DOM/layout changes.
   body.addEventListener('scroll', rememberBodyPosition, { passive: true });
-  body.addEventListener('pointerdown', onBodyPointerDown, true);
+  body.addEventListener('pointerdown', rememberButtonPress, true);\n  body.addEventListener('touchstart', rememberButtonPress, { capture: true, passive: true });
   body.addEventListener('click', onBodyClickCapture, true);
   if (typeof MutationObserver !== 'undefined') {
     scrollObserver = new MutationObserver(() => {
