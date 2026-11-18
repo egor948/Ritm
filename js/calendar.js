@@ -208,7 +208,7 @@ function timeline({ dates, mode, data, filters, extraHeader }) {
       const small = height < 34;
       const block = h('div', {
         class: 'blk ' + (isTask ? 'task' : 'event') + (it.done ? ' done' : '') + (isTask && isTaskExitStarted(it.id) ? ' task-completion-exit' : '') + (small ? ' small' : ''),
-        ...(isTask ? { 'data-task-id': it.id } : {}),
+        ...(isTask ? { 'data-task-id': it.id, 'data-task-done': it.done ? 'true' : 'false' } : {}),
         style: { top: top + 'px', height: height + 'px', left: `calc(${(lay.col / lay.cols) * 100}% + 1px)`, width: `calc(${100 / lay.cols}% - 3px)`, '--c': cv(it.color) },
         onclick: (e) => { e.stopPropagation(); isTask ? editTask(it.ref) : editEvent(it.ref, {}, date); },
       },
@@ -317,7 +317,7 @@ function itemRow(it, date) {
   else if (t === 'event') { const e = it.ref; time = e.allDay || !e.start ? 'весь день' : `${e.start}`; sub = e.allDay ? (e.endDate ? `до ${fmtDayMonth(e.endDate)}` : '') : `${e.start}–${e.end || ''}`; if (e.location) sub += (sub ? ' · ' : '') + e.location; }
   else { time = it.ref.time || 'задача'; sub = it.ref.time ? '' : 'Без времени'; }
   const click = t === 'goal' ? () => openGoalDetail(it.id) : t === 'event' ? () => editEvent(it.ref, {}, date) : () => editTask(it.ref);
-  return h('div', { class: 'ag-item' + (it.done ? ' done' : '') + (t === 'task' && isTaskExitStarted(it.id) ? ' task-completion-exit' : ''), ...(t === 'task' ? { 'data-task-id': it.id } : {}), style: { '--c': cv(it.color) }, onclick: click },
+  return h('div', { class: 'ag-item' + (it.done ? ' done' : '') + (t === 'task' && isTaskExitStarted(it.id) ? ' task-completion-exit' : ''), ...(t === 'task' ? { 'data-task-id': it.id, 'data-task-done': it.done ? 'true' : 'false' } : {}), style: { '--c': cv(it.color) }, onclick: click },
     h('div', { class: 'ai-time' }, time), h('i', { class: 'ai-bar' }),
     h('div', { class: 'ai-main' }, h('b', null, it.title), sub ? h('span', null, sub) : null),
     t === 'task' ? checkbox({ done: it.done, color: it.color, size: 22, onToggle: (d, el) => completeTask(it.ref, d, el) }) : null);
