@@ -5,6 +5,7 @@ import {
   MONTHS, MONTHS_NOM, WD_SHORT, WD_LONG, fmtDayMonth, fmtLong, plural, range, clear, clamp, relativeDay,
 } from './util.js';
 import * as S from './store.js';
+import { openCalendarManager, visibleEventsData } from './calendars.js';
 import { dayItems, layoutColumns, expandEvents, dayScore, isDateNotPast } from './logic.js';
 import { ic, cv, seg, openSheet, group, row, toggle, toast, dateInput, checkbox } from './ui.js';
 import { screen, navBtn } from './shell.js';
@@ -301,7 +302,7 @@ function header(mode, date) {
       h('div', { class: 'nav-actions' },
         h('button', { class: 'nav-btn', 'aria-label': 'Назад', onclick: () => shift(mode, -1) }, ic('chevL', 22)),
         h('button', { class: 'nav-btn', 'aria-label': 'Вперёд', onclick: () => shift(mode, 1) }, ic('chevR', 22)),
-        navBtn('filter', 'Что показывать', openFilters),
+        navBtn('calendar', 'Календари', () => openCalendarManager(openFilters)),
         navBtn('plus', 'Добавить', () => quickAdd({ date })))),
     h('div', { class: 'cal-ctl' },
       seg({ key: 'cal-mode', cls: 'small', options: [{ v: 'day', label: 'День' }, { v: 'week', label: 'Неделя' }, { v: 'month', label: 'Месяц' }, { v: 'year', label: 'Год' }, { v: 'agenda', label: 'Список' }], value: mode, onChange: setMode }),
@@ -518,7 +519,7 @@ function agendaView(date, data) {
 
 // =====================================================================
 export function calendarScreen() {
-  const data = S.data();
+  const data = visibleEventsData(S.data(), { selected: true });
   const mode = S.settings().calView || 'day';
   const date = view.calDate || todayStr();
   const body = { day: dayView, week: weekView, month: monthView, year: yearView, agenda: agendaView }[mode](date, data);
