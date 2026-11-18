@@ -480,6 +480,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
         d.calendarId = v;
         const selected = S.data().calendars.find((calendar) => calendar.id === v);
         if (selected && selected.color) d.color = selected.color;
+        redraw();
       });
       const endTimeControl = timeInput(d.end, (v) => (d.end = v), { clearable: false });
       const eventDateControl = dateInput(d.date, (v) => {
