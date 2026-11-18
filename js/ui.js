@@ -263,6 +263,10 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
     layer.style.top = vv.offsetTop + 'px';
     layer.style.height = vv.height + 'px';
     layer.style.bottom = 'auto';
+    if (body.dataset.scrollMode === 'free') {
+      stableBodyScrollTop = body.scrollTop;
+      return;
+    }
     // iOS may reset a nested overflow scroller when the visual viewport moves.
     restoreBodyPosition(savedTop);
   };
