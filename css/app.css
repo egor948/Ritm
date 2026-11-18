@@ -357,8 +357,16 @@ small { font-size: 12px; }
 .quick-steps { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
 
 /* ---------- задачи ---------- */
+.task-swipe-shell { position: relative; width: 100%; overflow: hidden; background: var(--c-red); touch-action: pan-y; }
+.task-swipe-foreground { position: relative; z-index: 1; transform: translate3d(0, 0, 0); transition: transform 0.24s cubic-bezier(.2,.8,.2,1); will-change: transform; }
+.task-swipe-shell.is-open .task-swipe-foreground { transform: translate3d(-96px, 0, 0); }
+.task-swipe-delete { position: absolute; top: 0; right: 0; bottom: 0; width: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 0; padding: 0 4px; color: #fff; background: var(--c-red); font: inherit; font-size: 12px; font-weight: 650; }
+.task-swipe-delete:active { filter: brightness(.92); }
+.task-swipe-delete .ic { flex: none; }
+.task-swipe-shell.is-dragging .task-swipe-foreground { transition: none; user-select: none; }
+.task-swipe-shell.is-deleting { pointer-events: none; }
+.task-swipe-shell.is-deleting .task-swipe-foreground { transform: translate3d(-110%, 0, 0) !important; transition: transform 0.18s cubic-bezier(.2,.8,.2,1); }
 .task-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; transition: background 0.2s; }
-.task-row:active { background: var(--fill); }
 .task-row.done { opacity: 0.76; }
 .task-row.task-completion-exit { overflow: hidden; pointer-events: none; animation: taskCompleteRowOut 0.38s var(--smooth) both; }
 @keyframes taskCompleteRowOut {
@@ -433,7 +441,7 @@ small { font-size: 12px; }
 .chev { color: var(--label-3); transition: transform 0.35s var(--spring); transform: rotate(-90deg); display: grid; }
 .chev.open { transform: none; }
 .sub-body { border-top: 0.5px solid var(--sep); }
-.sub-body > .task-row + .task-row { border-top: 0.5px solid var(--sep); }
+.sub-body > .task-swipe-shell + .task-swipe-shell { border-top: 0.5px solid var(--sep); }
 .sub-body > .add-row { border-top: 0.5px solid var(--sep); }
 .metric { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .metric.inline { padding: 12px 14px; border-bottom: 0.5px solid var(--sep); }
@@ -556,7 +564,7 @@ small { font-size: 12px; }
 @keyframes flicker { 50% { transform: scale(1.12) rotate(-3deg); } }
 .w-streak.bad .w-big b { color: var(--c-orange); }
 .w-tasks .task-row { padding-left: 0; padding-right: 0; }
-.w-tasks .task-row + .task-row { border-top: 0.5px solid var(--sep); }
+.w-tasks .task-swipe-shell + .task-swipe-shell { border-top: 0.5px solid var(--sep); }
 .w-tasks .add-row { padding-left: 0; }
 
 /* ---------- календарь ---------- */
