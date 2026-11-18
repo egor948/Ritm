@@ -6,6 +6,7 @@ import { screen, navBtn } from './shell.js';
 import { taskRow, goalColorOf, goalPath } from './components.js';
 import { editTask } from './editors.js';
 import { view } from './nav.js';
+import { isTaskInCompletionWindow } from './task-completion.js';
 
 export const FILTERS = [
   { v: 'today', label: 'Сегодня', icon: 'sun', color: 'blue' },
@@ -18,12 +19,12 @@ export const FILTERS = [
 
 export function filterTasks(tasks, f, today = todayStr()) {
   switch (f) {
-    case 'today': return tasks.filter((t) => !t.done && t.date === today);
-    case 'upcoming': return tasks.filter((t) => !t.done && t.date && t.date > today);
-    case 'inbox': return tasks.filter((t) => !t.done && !t.date);
-    case 'overdue': return tasks.filter((t) => !t.done && t.date && t.date < today);
+    case 'today': return tasks.filter((t) => (!t.done || isTaskInCompletionWindow(t.id)) && t.date === today);
+    case 'upcoming': return tasks.filter((t) => (!t.done || isTaskInCompletionWindow(t.id)) && t.date && t.date > today);
+    case 'inbox': return tasks.filter((t) => (!t.done || isTaskInCompletionWindow(t.id)) && !t.date);
+    case 'overdue': return tasks.filter((t) => (!t.done || isTaskInCompletionWindow(t.id)) && t.date && t.date < today);
     case 'done': return tasks.filter((t) => t.done);
-    default: return tasks.filter((t) => !t.done);
+    default: return tasks.filter((t) => !t.done || isTaskInCompletionWindow(t.id));
   }
 }
 export const countFor = (tasks, f, today = todayStr()) => filterTasks(tasks, f, today).length;
@@ -50,7 +51,7 @@ export function tasksScreen() {
   const listHost = h('div', { class: 'task-groups' });
   function renderList() {
     clear(listHost);
-    let list = query.trim() ? data.tasks.filter((t) => t.title.toLowerCase().includes(query.trim().toLowerCase()) || (t.notes || '').toLowerCase().includes(query.trim().toLowerCase())) : filterTasks(data.tasks, f);
+    let list = query.trim() ? data.tasks.filter((t) => (f === 'done' || !t.done || isTaskInCompletionWindow(t.id)) && (t.title.toLowerCase().includes(query.trim().toLowerCase()) || (t.notes || '').toLowerCase().includes(query.trim().toLowerCase()))) : filterTasks(data.tasks, f);
     const title = FILTERS.find((x) => x.v === f).label;
     if (!list.length) {
       listHost.appendChild(emptyState({
