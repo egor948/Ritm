@@ -1,7 +1,7 @@
 // Редакторы: задача, событие, привычка, цель + быстрое добавление и подтверждения.
-import { h, uid, todayStr, addDays, fromMin, toMin, clear, WD_SHORT, plural, captureScrollPosition, restoreScrollPosition } from './util.js';
+import { h, uid, todayStr, addDays, fromMin, toMin, ymd, clear, WD_SHORT, plural, captureScrollPosition, restoreScrollPosition } from './util.js';
 import * as S from './store.js';
-import { REMINDER_OPTIONS, REPEAT_LABELS } from './logic.js';
+import { REMINDER_OPTIONS, REPEAT_LABELS, isReminderInFuture } from './logic.js';
 import {
   openSheet, actionSheet, toast, ic, cv, group, groupTitle, groupNote, row, textInput, dateInput, timeInput, selectInput,
   numberInput, colorPicker, emojiPicker, pills, stepper, seg, toggle,
@@ -41,6 +41,33 @@ function editorShell({ title, draft, draw, onSave, onDelete, deleteLabel = 'Уд
   });
 }
 
+// Следующая доступная минута — напоминания нельзя назначать в прошлом.
+function reminderThreshold(now = new Date()) {
+  const next = new Date(now);
+  next.setSeconds(0, 0);
+  next.setMinutes(next.getMinutes() + 1);
+  return { date: ymd(next), time: fromMin(next.getHours() * 60 + next.getMinutes()) };
+}
+
+function reminderDefaults(preferredDate) {
+  const threshold = reminderThreshold();
+  const date = preferredDate && preferredDate >= threshold.date ? preferredDate : threshold.date;
+  return { date, time: date === threshold.date ? threshold.time : '09:00' };
+}
+
+function reminderSnapshot(reminders) {
+  return new Map((reminders || []).map((r) => [r.id, { date: r.date, time: r.time }]));
+}
+
+function changedReminderIsPast(reminders, original) {
+  const now = new Date();
+  return (reminders || []).some((r) => {
+    const before = original.get(r.id);
+    if (before && before.date === r.date && before.time === r.time) return false;
+    return !isReminderInFuture(r, now);
+  });
+}
+
 // Несколько независимых напоминаний с собственными датой и временем.
 function remindersGroup(d, redraw, defaultDate) {
   if (!Array.isArray(d.reminders)) d.reminders = [];
@@ -49,17 +76,43 @@ function remindersGroup(d, redraw, defaultDate) {
 
   const makeCard = (reminder) => {
     reminder.id = reminder.id || uid();
-    reminder.date = reminder.date || defaultDate || todayStr();
-    reminder.time = reminder.time || '09:00';
+    const fallback = reminderDefaults(defaultDate);
+    reminder.date = reminder.date || fallback.date;
+    reminder.time = reminder.time || reminderDefaults(reminder.date).time;
 
     const date = dateInput(reminder.date, (v) => {
-      if (v) reminder.date = v;
-      else date.querySelector('input').value = reminder.date;
+      const threshold = reminderThreshold();
+      if (!v || v < threshold.date) {
+        date.querySelector('input').value = reminder.date;
+        toast('Нельзя поставить напоминание на прошедшую дату');
+        return;
+      }
+      reminder.date = v;
+      refreshLimits(true);
     }, { clearable: false });
     const time = timeInput(reminder.time, (v) => {
-      if (v) reminder.time = v;
-      else time.querySelector('input').value = reminder.time;
+      if (!v || !isReminderInFuture({ date: reminder.date, time: v }, new Date())) {
+        time.querySelector('input').value = reminder.time;
+        toast('Нельзя поставить напоминание на прошедшее время');
+        return;
+      }
+      reminder.time = v;
+      refreshLimits(false);
     }, { clearable: false });
+
+    const refreshLimits = (adjustTime) => {
+      const threshold = reminderThreshold();
+      const dateField = date.querySelector('input');
+      const timeField = time.querySelector('input');
+      dateField.min = threshold.date;
+      timeField.min = reminder.date === threshold.date ? threshold.time : '';
+      if (adjustTime && reminder.date === threshold.date && reminder.time < threshold.time) {
+        reminder.time = threshold.time;
+        timeField.value = reminder.time;
+        toast('Время уже прошло — выбрана ближайшая доступная минута');
+      }
+    };
+    refreshLimits(false);
 
     const card = h('div', { class: 'reminder-card', 'data-scroll-anchor': `reminder:${reminder.id}` },
       h('div', { class: 'reminder-card-head' },
@@ -81,7 +134,7 @@ function remindersGroup(d, redraw, defaultDate) {
     type: 'button',
     class: 'reminder-add',
     onclick: () => {
-      const reminder = { id: uid(), date: defaultDate || todayStr(), time: '09:00' };
+      const reminder = { id: uid(), ...reminderDefaults(defaultDate) };
       d.reminders.push(reminder);
       list.insertBefore(makeCard(reminder), addButton);
     },
@@ -113,12 +166,14 @@ export function editTask(task, defaults = {}) {
     ? { ...task, reminders: legacyTaskReminders(task), checklist: (task.checklist || []).map((c) => ({ ...c })) }
     : { title: '', notes: '', goalId: null, date: null, time: null, done: false, priority: 0, weight: 1, reminderMin: null, remindAt: null, reminders: [], checklist: [], ...defaults };
   delete draft.duration;
+  draft.reminders = (draft.reminders || []).map((r) => ({ ...r, id: r.id || uid() }));
+  const originalReminders = reminderSnapshot(draft.reminders);
   const goalMode = () => { const g = data.goals.find((x) => x.id === draft.goalId); if (!g) return null; const p = g.parentId && data.goals.find((x) => x.id === g.parentId); return (p && (p.progressMode === 'weight' || g.progressMode === 'weight')) || g.progressMode === 'weight' ? 'weight' : null; };
 
   return editorShell({
     title: isNew ? 'Новая задача' : 'Задача',
     draft,
-    valid: (d) => (!d.title.trim() ? 'Введите название задачи' : null),
+    valid: (d) => (!d.title.trim() ? 'Введите название задачи' : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем' : null),
     onSave: (d) => {
       const out = { ...d, title: d.title.trim(), checklist: d.checklist.filter((c) => c.text.trim()) };
       out.reminders = (out.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time }));
@@ -230,13 +285,15 @@ export function editEvent(ev, defaults = {}, occDate = null) {
   const isNew = !ev;
   const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: 'blue', location: '', notes: '', reminderMin: null, reminders: [], repeat: { freq: 'none', interval: 1, days: [], until: null } };
   const draft = ev ? { ...base, ...ev, reminders: (ev.reminders || []).map((r) => ({ ...r })), repeat: { ...base.repeat, ...(ev.repeat || {}) } } : { ...base, ...defaults, reminders: (defaults.reminders || []).map((r) => ({ ...r })) };
+  draft.reminders = (draft.reminders || []).map((r) => ({ ...r, id: r.id || uid() }));
+  const originalReminders = reminderSnapshot(draft.reminders);
   const data = S.data();
   const tmpl = data.events;
   void tmpl;
   return editorShell({
     title: isNew ? 'Новое событие' : 'Событие',
     draft,
-    valid: (d) => (!d.title.trim() ? 'Введите название события' : !d.allDay && d.end && d.start && toMin(d.end) <= toMin(d.start) ? 'Время окончания должно быть позже начала' : null),
+    valid: (d) => (!d.title.trim() ? 'Введите название события' : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем' : !d.allDay && d.end && d.start && toMin(d.end) <= toMin(d.start) ? 'Время окончания должно быть позже начала' : null),
     onSave: (d) => {
       const out = { ...d, title: d.title.trim(), reminders: (d.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time })) };
       if (out.allDay) { out.start = null; out.end = null; if (out.endDate && out.endDate <= out.date) out.endDate = null; } else out.endDate = null;
