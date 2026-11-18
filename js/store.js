@@ -353,7 +353,10 @@ export function switchAccount(userId = null) {
   flush();
   storageKey = accountKey(userId);
   state = load(storageKey);
-  if (deviceTheme !== null) delete state.settings.theme;
+  // На первом запуске переносим тему именно из выбранного аккаунта,
+  // до возможного объединения гостевых настроек.
+  localTheme();
+  delete state.settings.theme;
   snap = null;
   commit();
   flush();
@@ -381,6 +384,7 @@ export function mergeGuestIntoCurrent(userId) {
   if (!userId) throw new Error('Не указан аккаунт для объединения');
   const marker = `${KEY}.merged.${userId}`;
   if (localStorage.getItem(marker) === '1') return { merged: false, alreadyDone: true };
+  localTheme();
   flush();
   const guest = load(KEY);
   const account = state;
