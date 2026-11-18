@@ -4,6 +4,9 @@ import * as S from './store.js';
 import { goalProgress, habitDone, habitValue, habitTarget, habitStreaks } from './logic.js';
 import { ic, cv, checkbox, burst, toast, ring } from './ui.js';
 import { editTask } from './editors.js';
+import { beginTaskCompletion, cancelTaskCompletion, isTaskExitStarted } from './task-completion.js';
+
+const taskUndoToasts = new Map();
 
 let popId = null; // элемент, которому нужно проиграть анимацию отметки при следующем рендере
 
@@ -36,18 +39,50 @@ export function completeTask(task, done, el) {
   const chain = [task.goalId, (goalById(data, task.goalId) || {}).parentId].filter(Boolean);
   for (const gid of chain) { const g = goalById(data, gid); if (g) before.set(gid, goalProgress(g, data).pct); }
   popId = task.id;
-  S.setTaskDone(task.id, done);
-  if (done) {
-    if (el) { const r = el.getBoundingClientRect(); burst(r.left + r.width / 2, r.top + r.height / 2, [goalColorOf(data, task.goalId), 'yellow', 'white'].map((c) => (c === 'white' ? 'mint' : c))); }
-    const after = S.data();
-    for (const gid of chain) {
-      const g = goalById(after, gid);
-      if (g && (before.get(gid) ?? 0) < 1 && goalProgress(g, after).pct >= 1) {
-        toast(`${g.emoji || '🎯'} «${g.title}» — выполнено! Поздравляю 🎉`);
-        break;
-      }
+
+  if (!done) {
+    cancelTaskCompletion(task.id);
+    const oldToast = taskUndoToasts.get(task.id);
+    if (oldToast) oldToast.hide();
+    taskUndoToasts.delete(task.id);
+    S.setTaskDone(task.id, false);
+    return;
+  }
+
+  const token = S.setTaskDone(task.id, true);
+  if (!token) return;
+  beginTaskCompletion(task.id);
+
+  if (el) {
+    const r = el.getBoundingClientRect();
+    burst(r.left + r.width / 2, r.top + r.height / 2, [goalColorOf(data, task.goalId), 'yellow', 'white'].map((c) => (c === 'white' ? 'mint' : c)));
+  }
+
+  let goalMessage = '';
+  const after = S.data();
+  for (const gid of chain) {
+    const g = goalById(after, gid);
+    if (g && (before.get(gid) ?? 0) < 1 && goalProgress(g, after).pct >= 1) {
+      goalMessage = `${g.emoji || '🎯'} «${g.title}» — выполнено! Поздравляю 🎉`;
+      break;
     }
   }
+
+  const undoToast = toast(goalMessage || 'Задача выполнена', {
+    label: 'Отменить',
+    onClick: () => {
+      if (!S.undoTaskDone(token)) {
+        toast('Не удалось отменить: задача уже изменилась');
+        return;
+      }
+      cancelTaskCompletion(task.id);
+      taskUndoToasts.delete(task.id);
+    },
+  });
+  taskUndoToasts.set(task.id, undoToast);
+  setTimeout(() => {
+    if (taskUndoToasts.get(task.id) === undoToast) taskUndoToasts.delete(task.id);
+  }, 6500);
 }
 
 // ---------- Строка задачи ----------
@@ -69,7 +104,7 @@ export function taskRow(task, data, { showGoal = true, showDate = true, compact 
   if ((task.reminderMin != null && task.time) || task.remindAt) meta.push(h('span', { class: 'meta' }, ic('bell', 13)));
   const popNow = popId === task.id;
   if (popNow) popId = null;
-  return h('div', { class: 'task-row' + (task.done ? ' done' : '') + (compact ? ' compact' : ''), 'data-scroll-anchor': `task:${task.id}`, onclick: () => editTask(task) },
+  return h('div', { class: 'task-row' + (task.done ? ' done' : '') + (compact ? ' compact' : '') + (isTaskExitStarted(task.id) ? ' task-completion-exit' : ''), 'data-task-id': task.id, 'data-scroll-anchor': `task:${task.id}`, onclick: () => editTask(task) },
     checkbox({ done: task.done, color, pop: popNow, onToggle: (d, el) => completeTask(task, d, el) }),
     h('div', { class: 'task-main' },
       h('div', { class: 'task-title' }, task.title),
