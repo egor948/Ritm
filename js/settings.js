@@ -29,140 +29,247 @@ export function openWidgetsEditor() {
   openSheet({
     title: 'Виджеты', left: null, right: { label: 'Готово', bold: true }, tall: true,
     build(api) {
-      const draw = () => {
-        clear(api.body);
-        const list = S.settings().widgets;
-        const widgetRows = list.map((w) => {
-          const handle = h('button', {
-            type: 'button',
-            class: 'widget-drag-handle',
-            'aria-label': `Перетащить виджет «${WIDGET_NAMES[w.id][0]}»`,
-            title: 'Удерживайте и перетащите',
-          }, ic('drag', 18));
-          const controls = h('div', { class: 'w-edit' },
-            handle,
-            toggle(w.on, (v) => {
-              const next = S.settings().widgets.map((x) => (x.id === w.id ? { ...x, on: v } : x));
-              S.setSettings({ widgets: next });
-            }));
-          const itemRow = row(WIDGET_NAMES[w.id][0], controls, {
-            icon: 'sparkle', iconColor: 'blue', cls: 'widget-edit-row',
-          });
-          itemRow.dataset.widgetId = w.id;
-          itemRow.querySelector('.row-label').appendChild(h('small', { class: 'row-sub' }, WIDGET_NAMES[w.id][1]));
-          return { itemRow, handle };
+      clear(api.body);
+      const list = S.settings().widgets;
+      const entries = list.map((w) => {
+        const handle = h('button', {
+          type: 'button',
+          class: 'widget-drag-handle',
+          'data-no-scroll-restore': true,
+          'aria-label': 'Перетащить виджет «' + WIDGET_NAMES[w.id][0] + '»',
+          title: 'Удерживайте и перетащите',
+        }, ic('drag', 18));
+        const controls = h('div', { class: 'w-edit' },
+          handle,
+          toggle(w.on, (v) => {
+            const next = S.settings().widgets.map((x) => (x.id === w.id ? { ...x, on: v } : x));
+            S.setSettings({ widgets: next });
+          }));
+        const itemRow = row(WIDGET_NAMES[w.id][0], controls, {
+          icon: 'sparkle', iconColor: 'blue', cls: 'widget-edit-row',
         });
-        const widgetGroup = group(...widgetRows.map((item) => item.itemRow));
+        itemRow.dataset.widgetId = w.id;
+        itemRow.querySelector('.row-label').appendChild(h('small', { class: 'row-sub' }, WIDGET_NAMES[w.id][1]));
+        return { itemRow, handle };
+      });
+      const widgetGroup = group(...entries.map((entry) => entry.itemRow));
+      widgetGroup.classList.add('widget-edit-group');
 
-        const saveOrder = () => {
-          const current = S.settings().widgets;
-          const byId = new Map(current.map((widget) => [widget.id, widget]));
-          const visibleIds = [...widgetGroup.children].map((node) => node.dataset.widgetId);
-          const ids = [...new Set([...visibleIds, ...current.map((widget) => widget.id)])];
-          const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
-          if (ordered.length !== current.length || ordered.some((widget, index) => widget.id !== current[index].id)) {
-            S.setSettings({ widgets: ordered });
-          }
-        };
-
-        const moveByKeyboard = (itemRow, delta, handle) => {
-          const rows = [...widgetGroup.children];
-          const index = rows.indexOf(itemRow);
-          const nextIndex = index + delta;
-          if (index < 0 || nextIndex < 0 || nextIndex >= rows.length) return;
-          if (delta < 0) widgetGroup.insertBefore(itemRow, rows[nextIndex]);
-          else widgetGroup.insertBefore(rows[nextIndex], itemRow);
-          saveOrder();
-          handle.focus({ preventScroll: true });
-        };
-
-        const bindDrag = (itemRow, handle) => {
-          let pointerId = null;
-          let startY = 0;
-          let holdTimer = null;
-          let dragging = false;
-          let changed = false;
-
-          const finish = (event) => {
-            if (pointerId == null || (event && event.pointerId !== pointerId)) return;
-            clearTimeout(holdTimer);
-            holdTimer = null;
-            if (dragging) {
-              itemRow.classList.remove('dragging');
-              if (changed) saveOrder();
-            }
-            if (handle.hasPointerCapture && handle.hasPointerCapture(pointerId)) {
-              try { handle.releasePointerCapture(pointerId); } catch (_) { /* указатель уже освобождён */ }
-            }
-            pointerId = null;
-            dragging = false;
-            changed = false;
-          };
-
-          handle.addEventListener('pointerdown', (event) => {
-            if (pointerId != null || (event.pointerType === 'mouse' && event.button !== 0)) return;
-            pointerId = event.pointerId;
-            startY = event.clientY;
-            changed = false;
-            dragging = false;
-            if (handle.setPointerCapture) {
-              try { handle.setPointerCapture(pointerId); } catch (_) { /* fallback без pointer capture */ }
-            }
-            holdTimer = setTimeout(() => {
-              if (pointerId == null) return;
-              dragging = true;
-              itemRow.classList.add('dragging');
-            }, 200);
-          });
-
-          handle.addEventListener('pointermove', (event) => {
-            if (event.pointerId !== pointerId) return;
-            if (!dragging) {
-              if (Math.abs(event.clientY - startY) > 10) {
-                clearTimeout(holdTimer);
-                holdTimer = null;
-              }
-              return;
-            }
-            event.preventDefault();
-
-            // Прокручиваем список, если переносим виджет к верхнему или нижнему краю шита.
-            const bounds = api.body.getBoundingClientRect();
-            if (event.clientY < bounds.top + 48) api.body.scrollTop = Math.max(0, api.body.scrollTop - 12);
-            else if (event.clientY > bounds.bottom - 48) api.body.scrollTop += 12;
-
-            const siblings = [...widgetGroup.children].filter((node) => node !== itemRow);
-            const before = siblings.find((node) => {
-              const rect = node.getBoundingClientRect();
-              return event.clientY < rect.top + rect.height / 2;
-            });
-            if (before) {
-              if (itemRow.nextElementSibling !== before) {
-                widgetGroup.insertBefore(itemRow, before);
-                changed = true;
-              }
-            } else if (widgetGroup.lastElementChild !== itemRow) {
-              widgetGroup.appendChild(itemRow);
-              changed = true;
-            }
-          });
-
-          handle.addEventListener('pointerup', finish);
-          handle.addEventListener('pointercancel', finish);
-          handle.addEventListener('keydown', (event) => {
-            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-            event.preventDefault();
-            moveByKeyboard(itemRow, event.key === 'ArrowUp' ? -1 : 1, handle);
-          });
-        };
-
-        widgetRows.forEach(({ itemRow, handle }) => bindDrag(itemRow, handle));
-        api.body.append(
-          groupNote('Чтобы изменить порядок, удерживайте значок с точками и перетащите виджет вверх или вниз. Порядок сохраняется автоматически.'),
-          widgetGroup,
-          h('div', { class: 'sheet-pad' }));
+      const getRows = () => [...widgetGroup.children].filter((node) => node.classList.contains('widget-edit-row'));
+      const capturePositions = (rows) => new Map(rows.map((node) => [node, node.getBoundingClientRect().top]));
+      const animatePositions = (positions) => {
+        for (const [node, oldTop] of positions) {
+          if (!node.isConnected) continue;
+          const delta = oldTop - node.getBoundingClientRect().top;
+          if (Math.abs(delta) < 1) continue;
+          node.getAnimations().forEach((animation) => animation.cancel());
+          node.animate(
+            [{ transform: 'translateY(' + delta + 'px)' }, { transform: 'translateY(0)' }],
+            { duration: 260, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+          );
+        }
       };
-      draw();
+
+      const saveOrder = () => {
+        const current = S.settings().widgets;
+        const byId = new Map(current.map((widget) => [widget.id, widget]));
+        const ids = getRows().map((node) => node.dataset.widgetId);
+        const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
+        if (ordered.length === current.length && ordered.some((widget, index) => widget.id !== current[index].id)) {
+          S.setSettings({ widgets: ordered });
+        }
+      };
+
+      const moveByKeyboard = (itemRow, delta, handle) => {
+        const rows = getRows();
+        const index = rows.indexOf(itemRow);
+        const nextIndex = index + delta;
+        if (index < 0 || nextIndex < 0 || nextIndex >= rows.length) return;
+        const positions = capturePositions(rows);
+        if (delta < 0) widgetGroup.insertBefore(itemRow, rows[nextIndex]);
+        else widgetGroup.insertBefore(rows[nextIndex], itemRow);
+        animatePositions(positions);
+        saveOrder();
+        handle.focus({ preventScroll: true });
+      };
+
+      const bindDrag = ({ itemRow, handle }) => {
+        let pointerId = null;
+        let startY = 0;
+        let grabOffsetY = 0;
+        let latestY = 0;
+        let holdTimer = null;
+        let dragging = false;
+        let changed = false;
+        let frameId = 0;
+        let placeholder = null;
+        let preview = null;
+
+        const movePlaceholder = (y) => {
+          if (!placeholder || !dragging) return;
+          const candidates = getRows().filter((node) => node !== itemRow);
+          const before = candidates.find((node) => {
+            const rect = node.getBoundingClientRect();
+            return y < rect.top + rect.height / 2;
+          }) || null;
+          if (before === placeholder.nextElementSibling) return;
+          if (!before && widgetGroup.lastElementChild === placeholder) return;
+
+          const positions = capturePositions(candidates);
+          if (before) widgetGroup.insertBefore(placeholder, before);
+          else widgetGroup.appendChild(placeholder);
+          animatePositions(positions);
+          changed = true;
+        };
+
+        const dragFrame = () => {
+          frameId = 0;
+          if (!dragging || !preview) return;
+          preview.style.top = (latestY - grabOffsetY) + 'px';
+
+          const bounds = api.body.getBoundingClientRect();
+          let scrollDelta = 0;
+          if (latestY < bounds.top + 54) scrollDelta = -9;
+          else if (latestY > bounds.bottom - 54) scrollDelta = 9;
+          if (scrollDelta) api.body.scrollTop = Math.max(0, api.body.scrollTop + scrollDelta);
+
+          movePlaceholder(latestY);
+          if (scrollDelta) frameId = requestAnimationFrame(dragFrame);
+        };
+
+        const scheduleDragFrame = () => {
+          if (!frameId) frameId = requestAnimationFrame(dragFrame);
+        };
+
+        const startDrag = () => {
+          if (pointerId == null || dragging) return;
+          const rect = itemRow.getBoundingClientRect();
+          const groupRect = widgetGroup.getBoundingClientRect();
+          dragging = true;
+          changed = false;
+          grabOffsetY = startY - rect.top;
+          api.body.dataset.scrollMode = 'free';
+
+          placeholder = h('div', {
+            class: 'widget-drop-placeholder',
+            'aria-hidden': 'true',
+            style: { height: rect.height + 'px' },
+          });
+          widgetGroup.insertBefore(placeholder, itemRow);
+
+          // Оригинал остаётся в DOM и сохраняет pointer capture; его место занимает placeholder.
+          itemRow.classList.add('drag-source');
+          itemRow.style.position = 'absolute';
+          itemRow.style.left = '0';
+          itemRow.style.top = (rect.top - groupRect.top) + 'px';
+          itemRow.style.width = '100%';
+          itemRow.style.height = rect.height + 'px';
+          itemRow.style.margin = '0';
+          itemRow.style.opacity = '0.01';
+
+          // Отдельная визуальная карточка следует за пальцем и не ограничена overflow списка.
+          preview = itemRow.cloneNode(true);
+          preview.classList.add('widget-drag-preview');
+          preview.setAttribute('aria-hidden', 'true');
+          preview.style.left = rect.left + 'px';
+          preview.style.top = rect.top + 'px';
+          preview.style.width = rect.width + 'px';
+          preview.style.height = rect.height + 'px';
+          document.body.appendChild(preview);
+          scheduleDragFrame();
+        };
+
+        const finish = (event) => {
+          if (pointerId == null || (event && event.pointerId !== pointerId)) return;
+          clearTimeout(holdTimer);
+          holdTimer = null;
+          if (frameId) cancelAnimationFrame(frameId);
+          frameId = 0;
+
+          if (dragging && placeholder && placeholder.isConnected) {
+            const releaseTop = preview ? Number.parseFloat(preview.style.top) : itemRow.getBoundingClientRect().top;
+            placeholder.replaceWith(itemRow);
+            if (preview) preview.remove();
+            preview = null;
+            placeholder = null;
+
+            itemRow.classList.remove('drag-source');
+            for (const property of ['position', 'left', 'top', 'width', 'height', 'margin', 'opacity']) {
+              itemRow.style.removeProperty(property);
+            }
+            const finalTop = itemRow.getBoundingClientRect().top;
+            const delta = releaseTop - finalTop;
+            if (Math.abs(delta) > 1) {
+              itemRow.animate(
+                [
+                  { transform: 'translateY(' + delta + 'px) scale(1.025)', boxShadow: '0 14px 34px rgba(0,0,0,.18)' },
+                  { transform: 'translateY(0) scale(1)', boxShadow: '0 0 0 rgba(0,0,0,0)' },
+                ],
+                { duration: 340, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+              );
+            }
+            if (changed) saveOrder();
+          } else {
+            if (preview) preview.remove();
+            if (placeholder) placeholder.remove();
+            preview = null;
+            placeholder = null;
+          }
+
+          delete api.body.dataset.scrollMode;
+          if (handle.hasPointerCapture && handle.hasPointerCapture(pointerId)) {
+            try { handle.releasePointerCapture(pointerId); } catch (_) { /* указатель уже освобождён */ }
+          }
+          pointerId = null;
+          dragging = false;
+          changed = false;
+          handle.setAttribute('aria-grabbed', 'false');
+        };
+
+        handle.addEventListener('pointerdown', (event) => {
+          if (pointerId != null || (event.pointerType === 'mouse' && event.button !== 0)) return;
+          pointerId = event.pointerId;
+          startY = event.clientY;
+          latestY = event.clientY;
+          dragging = false;
+          changed = false;
+          handle.setAttribute('aria-grabbed', 'false');
+          if (handle.setPointerCapture) {
+            try { handle.setPointerCapture(pointerId); } catch (_) { /* fallback без pointer capture */ }
+          }
+          holdTimer = setTimeout(startDrag, 210);
+        });
+
+        handle.addEventListener('pointermove', (event) => {
+          if (event.pointerId !== pointerId) return;
+          latestY = event.clientY;
+          if (!dragging) {
+            if (Math.abs(latestY - startY) > 16) {
+              clearTimeout(holdTimer);
+              holdTimer = null;
+            }
+            return;
+          }
+          event.preventDefault();
+          scheduleDragFrame();
+        });
+
+        handle.addEventListener('pointerup', finish);
+        handle.addEventListener('pointercancel', finish);
+        handle.addEventListener('lostpointercapture', finish);
+        handle.addEventListener('keydown', (event) => {
+          if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+          event.preventDefault();
+          moveByKeyboard(itemRow, event.key === 'ArrowUp' ? -1 : 1, handle);
+        });
+      };
+
+      entries.forEach(bindDrag);
+      api.body.append(
+        groupNote('Удерживайте значок с точками и перетащите виджет на нужное место. Порядок в этом списке и на экране «Сегодня» обновится одновременно.'),
+        widgetGroup,
+        h('div', { class: 'sheet-pad' }),
+      );
     },
   });
 }
