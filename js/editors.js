@@ -1,7 +1,7 @@
 // Редакторы: задача, событие, привычка, цель + быстрое добавление и подтверждения.
 import { h, uid, todayStr, addDays, fromMin, toMin, ymd, clear, WD_SHORT, plural, captureScrollPosition, restoreScrollPosition } from './util.js';
 import * as S from './store.js';
-import { REMINDER_OPTIONS, REPEAT_LABELS, isReminderInFuture } from './logic.js';
+import { REMINDER_OPTIONS, REPEAT_LABELS, isReminderInFuture, isDateNotPast } from './logic.js';
 import {
   openSheet, actionSheet, toast, ic, cv, group, groupTitle, groupNote, row, textInput, dateInput, timeInput, selectInput,
   numberInput, colorPicker, emojiPicker, pills, stepper, seg, toggle,
@@ -69,7 +69,7 @@ function changedReminderIsPast(reminders, original) {
 }
 
 function changedDateIsPast(date, originalDate) {
-  return Boolean(date && date < todayStr() && date !== originalDate);
+  return Boolean(date && !isDateNotPast(date) && date !== originalDate);
 }
 
 // Несколько независимых напоминаний с собственными датой и временем.
