@@ -189,10 +189,25 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
   };
 
   const rememberBodyPosition = () => {
+    if (body.dataset.scrollMode === 'free') {
+      stableBodyScrollTop = body.scrollTop;
+      return;
+    }
     if (!restoringScroll && pointerScrollTop == null) stableBodyScrollTop = body.scrollTop;
   };
   const rememberButtonPress = (event) => {
-    const button = event.target.closest && event.target.closest('button');
+    const target = event.target;
+    const noRestore = target.closest && target.closest('[data-no-scroll-restore]');
+    if (noRestore) {
+      // Drag controls manage their own scroll position; do not lock the sheet on pointerdown.
+      pointerScrollTop = null;
+      restoringScroll = false;
+      for (const timer of restoreTimers) clearTimeout(timer);
+      restoreTimers = [];
+      stableBodyScrollTop = body.scrollTop;
+      return;
+    }
+    const button = target.closest && target.closest('button');
     if (!button) {
       // A new gesture on the scroll area means the user intentionally wants to scroll.
       pointerScrollTop = null;
@@ -288,6 +303,10 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
   body.addEventListener('click', onBodyClickCapture, true);
   if (typeof MutationObserver !== 'undefined') {
     scrollObserver = new MutationObserver(() => {
+      if (body.dataset.scrollMode === 'free') {
+        stableBodyScrollTop = body.scrollTop;
+        return;
+      }
       const savedTop = pointerScrollTop == null ? stableBodyScrollTop : pointerScrollTop;
       restoreBodyPosition(savedTop);
     });
