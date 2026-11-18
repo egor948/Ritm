@@ -342,7 +342,7 @@ function dayView(date, data) {
       h('span', null, WD_SHORT[dow(d)]), h('b', null, parseYmd(d).getDate()), h('i', { class: n ? 'on' : '' }));
   }));
 
-  const it = dayItems(data, date, { filters: f });
+  const it = visibleDayItems(data, date, f);
   const top = h('div', { class: 'day-top' });
   top.appendChild(strip);
 
