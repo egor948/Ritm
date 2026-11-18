@@ -1,5 +1,5 @@
 // Service worker: офлайн-кэш оболочки приложения и показ push-уведомлений.
-const VERSION = 'ritm-v4.13.1';
+const VERSION = 'ritm-v4.13.2';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'config.js', 'css/app.css?v=4.13.1',
   'js/app.js?v=4.13.1', 'js/util.js', 'js/logic.js', 'js/store.js', 'js/ui.js', 'js/components.js', 'js/task-completion.js', 'js/task-swipe.js', 'js/editors.js', 'js/nav.js', 'js/shell.js',
