@@ -205,15 +205,14 @@ export function restoreScrollPosition(scroller, saved) {
   if (!scroller || !saved) return;
   const restore = () => {
     if (!scroller.isConnected) return;
-    if (saved.anchor) {
+    for (const anchor of saved.anchors || (saved.anchor ? [saved.anchor] : [])) {
       const el = [...scroller.querySelectorAll('[data-scroll-anchor]')]
-        .find((node) => node.getAttribute('data-scroll-anchor') === saved.anchor.key);
-      if (el) {
-        const viewport = scroller.getBoundingClientRect();
-        const rect = el.getBoundingClientRect();
-        scroller.scrollTop += rect.top - viewport.top - saved.anchor.offset;
-        return;
-      }
+        .find((node) => node.getAttribute('data-scroll-anchor') === anchor.key);
+      if (!el) continue; // якорь мог быть удалён — берём следующий видимый элемент
+      const viewport = scroller.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
+      scroller.scrollTop += rect.top - viewport.top - anchor.offset;
+      return;
     }
     scroller.scrollTop = saved.top;
   };
