@@ -49,6 +49,8 @@ function openCalendarEditor(calendar, onSaved) {
       onClick: (sheet) => {
         const name = String(draft.name || '').trim();
         if (!name) { toast('Укажите название календаря'); nameControl.focus(); return; }
+        const duplicate = S.data().calendars.some((item) => item.id !== (calendar && calendar.id) && item.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
+        if (duplicate) { toast('Календарь с таким названием уже есть'); nameControl.focus(); return; }
         S.upsert('calendars', {
           ...(calendar || {}),
           id: calendar ? calendar.id : uid(),
