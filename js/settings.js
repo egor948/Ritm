@@ -32,28 +32,140 @@ export function openWidgetsEditor() {
       const draw = () => {
         clear(api.body);
         const list = S.settings().widgets;
+        const widgetRows = list.map((w) => {
+          const handle = h('button', {
+            type: 'button',
+            class: 'widget-drag-handle',
+            'aria-label': `Перетащить виджет «${WIDGET_NAMES[w.id][0]}»`,
+            title: 'Удерживайте и перетащите',
+          }, ic('drag', 18));
+          const controls = h('div', { class: 'w-edit' },
+            handle,
+            toggle(w.on, (v) => {
+              const next = S.settings().widgets.map((x) => (x.id === w.id ? { ...x, on: v } : x));
+              S.setSettings({ widgets: next });
+            }));
+          const itemRow = row(WIDGET_NAMES[w.id][0], controls, {
+            icon: 'sparkle', iconColor: 'blue', cls: 'widget-edit-row',
+          });
+          itemRow.dataset.widgetId = w.id;
+          itemRow.querySelector('.row-label').appendChild(h('small', { class: 'row-sub' }, WIDGET_NAMES[w.id][1]));
+          return { itemRow, handle };
+        });
+        const widgetGroup = group(...widgetRows.map((item) => item.itemRow));
+
+        const saveOrder = () => {
+          const current = S.settings().widgets;
+          const byId = new Map(current.map((widget) => [widget.id, widget]));
+          const visibleIds = [...widgetGroup.children].map((node) => node.dataset.widgetId);
+          const ids = [...new Set([...visibleIds, ...current.map((widget) => widget.id)])];
+          const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
+          if (ordered.length !== current.length || ordered.some((widget, index) => widget.id !== current[index].id)) {
+            S.setSettings({ widgets: ordered });
+          }
+        };
+
+        const moveByKeyboard = (itemRow, delta, handle) => {
+          const rows = [...widgetGroup.children];
+          const index = rows.indexOf(itemRow);
+          const nextIndex = index + delta;
+          if (index < 0 || nextIndex < 0 || nextIndex >= rows.length) return;
+          if (delta < 0) widgetGroup.insertBefore(itemRow, rows[nextIndex]);
+          else widgetGroup.insertBefore(rows[nextIndex], itemRow);
+          saveOrder();
+          handle.focus({ preventScroll: true });
+        };
+
+        const bindDrag = (itemRow, handle) => {
+          let pointerId = null;
+          let startY = 0;
+          let holdTimer = null;
+          let dragging = false;
+          let changed = false;
+
+          const finish = (event) => {
+            if (pointerId == null || (event && event.pointerId !== pointerId)) return;
+            clearTimeout(holdTimer);
+            holdTimer = null;
+            if (dragging) {
+              itemRow.classList.remove('dragging');
+              if (changed) saveOrder();
+            }
+            if (handle.hasPointerCapture && handle.hasPointerCapture(pointerId)) {
+              try { handle.releasePointerCapture(pointerId); } catch (_) { /* указатель уже освобождён */ }
+            }
+            pointerId = null;
+            dragging = false;
+            changed = false;
+          };
+
+          handle.addEventListener('pointerdown', (event) => {
+            if (pointerId != null || (event.pointerType === 'mouse' && event.button !== 0)) return;
+            pointerId = event.pointerId;
+            startY = event.clientY;
+            changed = false;
+            dragging = false;
+            if (handle.setPointerCapture) {
+              try { handle.setPointerCapture(pointerId); } catch (_) { /* fallback без pointer capture */ }
+            }
+            holdTimer = setTimeout(() => {
+              if (pointerId == null) return;
+              dragging = true;
+              itemRow.classList.add('dragging');
+            }, 200);
+          });
+
+          handle.addEventListener('pointermove', (event) => {
+            if (event.pointerId !== pointerId) return;
+            if (!dragging) {
+              if (Math.abs(event.clientY - startY) > 10) {
+                clearTimeout(holdTimer);
+                holdTimer = null;
+              }
+              return;
+            }
+            event.preventDefault();
+
+            // Прокручиваем список, если переносим виджет к верхнему или нижнему краю шита.
+            const bounds = api.body.getBoundingClientRect();
+            if (event.clientY < bounds.top + 48) api.body.scrollTop = Math.max(0, api.body.scrollTop - 12);
+            else if (event.clientY > bounds.bottom - 48) api.body.scrollTop += 12;
+
+            const siblings = [...widgetGroup.children].filter((node) => node !== itemRow);
+            const before = siblings.find((node) => {
+              const rect = node.getBoundingClientRect();
+              return event.clientY < rect.top + rect.height / 2;
+            });
+            if (before) {
+              if (itemRow.nextElementSibling !== before) {
+                widgetGroup.insertBefore(itemRow, before);
+                changed = true;
+              }
+            } else if (widgetGroup.lastElementChild !== itemRow) {
+              widgetGroup.appendChild(itemRow);
+              changed = true;
+            }
+          });
+
+          handle.addEventListener('pointerup', finish);
+          handle.addEventListener('pointercancel', finish);
+          handle.addEventListener('keydown', (event) => {
+            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+            event.preventDefault();
+            moveByKeyboard(itemRow, event.key === 'ArrowUp' ? -1 : 1, handle);
+          });
+        };
+
+        widgetRows.forEach(({ itemRow, handle }) => bindDrag(itemRow, handle));
         api.body.append(
-          groupNote('Включайте нужные виджеты и меняйте порядок стрелками. Изменения видны сразу на экране «Сегодня».'),
-          group(...list.map((w, i) => row(WIDGET_NAMES[w.id][0], h('div', { class: 'w-edit' },
-            h('button', { class: 'icon-btn', disabled: i === 0, 'aria-label': 'Выше', onclick: () => move(i, -1) }, ic('up', 18)),
-            h('button', { class: 'icon-btn', disabled: i === list.length - 1, 'aria-label': 'Ниже', onclick: () => move(i, 1) }, ic('down', 18)),
-            toggle(w.on, (v) => { const n = S.settings().widgets.map((x) => (x.id === w.id ? { ...x, on: v } : x)); S.setSettings({ widgets: n }); })), { icon: 'sparkle', iconColor: 'blue' }))),
+          groupNote('Чтобы изменить порядок, удерживайте значок с точками и перетащите виджет вверх или вниз. Порядок сохраняется автоматически.'),
+          widgetGroup,
           h('div', { class: 'sheet-pad' }));
-        api.body.querySelectorAll('.row').forEach((r, i) => { const s = h('small', { class: 'row-sub' }, WIDGET_NAMES[list[i].id][1]); r.querySelector('.row-label').appendChild(s); });
-      };
-      const move = (i, d) => {
-        const list = [...S.settings().widgets];
-        const j = i + d;
-        if (j < 0 || j >= list.length) return;
-        [list[i], list[j]] = [list[j], list[i]];
-        S.setSettings({ widgets: list });
-        draw();
       };
       draw();
     },
   });
 }
-
 export function openSettings() {
   openSheet({
     title: 'Настройки', left: null, right: { label: 'Готово', bold: true }, tall: true,
