@@ -12,9 +12,20 @@ import { editEvent, editTask, quickAdd } from './editors.js';
 import { habitChip, completeTask } from './components.js';
 import { openGoalDetail } from './goals.js';
 import { view } from './nav.js';
+import { isTaskInCompletionWindow, isTaskExitStarted } from './task-completion.js';
 
 const HOUR = { day: 60, week: 46 };
 const SNAP = 15;
+
+function visibleDayItems(data, date, filters) {
+  const items = dayItems(data, date, { filters });
+  const visible = (item) => item.type !== 'task' || !item.done || isTaskInCompletionWindow(item.id);
+  return {
+    ...items,
+    timed: items.timed.filter(visible),
+    dated: items.dated.filter(visible),
+  };
+}
 
 // ---------------------------------------------------------------- состояние перетаскивания
 let drag = null;
@@ -179,7 +190,7 @@ function timeline({ dates, mode, data, filters, extraHeader }) {
   const ctxFn = () => ({ columns: cols, hourH, scroller });
 
   dates.forEach((date) => {
-    const items = dayItems(data, date, { filters });
+    const items = visibleDayItems(data, date, filters);
     const col = h('div', { class: 'tl-col' + (date === today ? ' today' : '') + (dates.length > 1 && date === view.calDate ? ' sel' : ''), 'data-date': date });
     cols.push({ date, el: col });
     col.addEventListener('click', (e) => {
@@ -196,7 +207,8 @@ function timeline({ dates, mode, data, filters, extraHeader }) {
       const isTask = it.type === 'task';
       const small = height < 34;
       const block = h('div', {
-        class: 'blk ' + (isTask ? 'task' : 'event') + (it.done ? ' done' : '') + (small ? ' small' : ''),
+        class: 'blk ' + (isTask ? 'task' : 'event') + (it.done ? ' done' : '') + (isTask && isTaskExitStarted(it.id) ? ' task-completion-exit' : '') + (small ? ' small' : ''),
+        ...(isTask ? { 'data-task-id': it.id } : {}),
         style: { top: top + 'px', height: height + 'px', left: `calc(${(lay.col / lay.cols) * 100}% + 1px)`, width: `calc(${100 / lay.cols}% - 3px)`, '--c': cv(it.color) },
         onclick: (e) => { e.stopPropagation(); isTask ? editTask(it.ref) : editEvent(it.ref, {}, date); },
       },
@@ -305,13 +317,13 @@ function itemRow(it, date) {
   else if (t === 'event') { const e = it.ref; time = e.allDay || !e.start ? 'весь день' : `${e.start}`; sub = e.allDay ? (e.endDate ? `до ${fmtDayMonth(e.endDate)}` : '') : `${e.start}–${e.end || ''}`; if (e.location) sub += (sub ? ' · ' : '') + e.location; }
   else { time = it.ref.time || 'задача'; sub = it.ref.time ? '' : 'Без времени'; }
   const click = t === 'goal' ? () => openGoalDetail(it.id) : t === 'event' ? () => editEvent(it.ref, {}, date) : () => editTask(it.ref);
-  return h('div', { class: 'ag-item' + (it.done ? ' done' : ''), style: { '--c': cv(it.color) }, onclick: click },
+  return h('div', { class: 'ag-item' + (it.done ? ' done' : '') + (t === 'task' && isTaskExitStarted(it.id) ? ' task-completion-exit' : ''), ...(t === 'task' ? { 'data-task-id': it.id } : {}), style: { '--c': cv(it.color) }, onclick: click },
     h('div', { class: 'ai-time' }, time), h('i', { class: 'ai-bar' }),
     h('div', { class: 'ai-main' }, h('b', null, it.title), sub ? h('span', null, sub) : null),
     t === 'task' ? checkbox({ done: it.done, color: it.color, size: 22, onToggle: (d, el) => completeTask(it.ref, d, el) }) : null);
 }
 function flatItems(data, date) {
-  const it = dayItems(data, date, { filters: filtersOf() });
+  const it = visibleDayItems(data, date, filtersOf());
   const rows = [...it.deadlines, ...it.allDay, ...[...it.timed, ...it.dated].sort((a, b) => (a.startMin ?? 9999) - (b.startMin ?? 9999))];
   return { rows, habits: it.habits };
 }
@@ -324,7 +336,7 @@ function dayView(date, data) {
   const today = todayStr();
   const ws = weekStart(date, S.settings().weekStart);
   const strip = h('div', { class: 'week-strip' }, range(ws, addDays(ws, 6)).map((d) => {
-    const it = dayItems(data, d, { filters: f });
+    const it = visibleDayItems(data, d, f);
     const n = it.timed.length + it.allDay.length + it.dated.length;
     return h('button', { class: 'ws-day' + (d === date ? ' sel' : '') + (d === today ? ' today' : ''), onclick: () => { view.calDir = d > date ? 1 : -1; view.calDate = d; rerender(); } },
       h('span', null, WD_SHORT[dow(d)]), h('b', null, parseYmd(d).getDate()), h('i', { class: n ? 'on' : '' }));
@@ -394,7 +406,7 @@ function weekView(date, data) {
   const dates = range(ws, addDays(ws, 6));
   const f = filtersOf();
   const head = h('div', { class: 'wk-head' }, h('i', { class: 'wk-gut' }), dates.map((d) => {
-    const it = dayItems(data, d, { filters: f });
+    const it = visibleDayItems(data, d, f);
     return h('button', { class: 'wk-day' + (d === today ? ' today' : '') + (d === date ? ' sel' : ''), onclick: () => { view.calDate = d; S.setSettings({ calView: 'day' }); } },
       h('span', null, WD_SHORT[dow(d)]), h('b', null, parseYmd(d).getDate()),
       h('div', { class: 'wk-dots' }, it.allDay.slice(0, 2).map((a) => h('i', { style: { '--c': cv(a.color) } })), it.deadlines.length ? h('i', { style: { '--c': cv('purple') } }) : null));
@@ -419,7 +431,7 @@ function monthView(date, data) {
   const days = range(start, addDays(start, weeks * 7 - 1));
   const wd = [...Array(7)].map((_, i) => WD_SHORT[(S.settings().weekStart + i) % 7]);
   const grid = h('div', { class: 'mo-grid', style: { '--rows': weeks } }, days.map((d) => {
-    const it = dayItems(data, d, { filters: f });
+    const it = visibleDayItems(data, d, f);
     const chips = [...it.deadlines, ...it.allDay, ...it.timed, ...it.dated];
     const inMonth = d.slice(0, 7) === first.slice(0, 7);
     const hb = it.habits.length;
