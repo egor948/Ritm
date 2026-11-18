@@ -654,3 +654,43 @@ small { font-size: 12px; }
 .sync-wait { color: #d49a27 !important; }
 .sync-bad { color: #e05252 !important; }
 .sync-muted { color: var(--label-2) !important; }
+
+
+/* Напоминания: отдельные компактные карточки с ровными отступами */
+.reminder-list { display: flex; flex-direction: column; gap: 10px; margin: 0 0 18px; }
+.reminder-card {
+  display: flex; flex-direction: column; gap: 14px; min-width: 0;
+  padding: 14px; border-radius: 15px; background: var(--sheet-group);
+  box-shadow: inset 0 0 0 0.5px var(--sep);
+}
+.reminder-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.reminder-card-title { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.reminder-card-title svg { color: var(--accent); flex: none; }
+.reminder-remove {
+  display: grid; place-items: center; flex: none; width: 30px; height: 30px;
+  border-radius: 50%; color: var(--label-2); background: var(--fill);
+  transition: transform .18s ease, background .18s ease;
+}
+.reminder-remove:active { transform: scale(.92); background: var(--sep); }
+.reminder-fields { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; }
+.reminder-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.reminder-field > span { padding-left: 2px; font-size: 12px; font-weight: 600; color: var(--label-2); }
+.reminder-field .dt-wrap { width: 100%; min-width: 0; }
+.reminder-field .inp.dt { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; text-align: left; text-align-last: left; }
+.reminder-add {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; padding: 10px 14px; border: 1px dashed var(--sep);
+  border-radius: 14px; color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--sheet-group));
+  font-size: 15px; font-weight: 600; transition: background .18s ease, transform .18s ease;
+}
+.reminder-add:active { transform: scale(.985); background: color-mix(in srgb, var(--accent) 10%, var(--sheet-group)); }
+
+/* Статус синхронизации отдельной строкой под email */
+.sync-summary { min-width: 0; }
+.sync-summary .row-label { flex: 1 1 auto; white-space: normal; overflow-wrap: anywhere; }
+.sync-status-line { padding: 0 16px 13px 58px; min-width: 0; }
+.sync-state { white-space: normal; line-height: 1.35; overflow-wrap: anywhere; }
+
+@media (max-width: 380px) {
+  .reminder-fields { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+}
