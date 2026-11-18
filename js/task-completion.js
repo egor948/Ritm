@@ -24,7 +24,7 @@ export function beginTaskCompletion(id) {
     entry.exitStarted = true;
     if (typeof document !== 'undefined') {
       document.querySelectorAll('[data-task-id]').forEach((el) => {
-        if (el.dataset.taskId === String(id)) el.classList.add('task-completion-exit');
+        if (el.dataset.taskId === String(id) && el.dataset.taskDone === 'true') el.classList.add('task-completion-exit');
       });
     }
     entry.exitTimer = setTimeout(() => {
