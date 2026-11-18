@@ -356,6 +356,24 @@ function eventReminderDate(start, reminder) {
   return when;
 }
 
+// Возвращает короткий диапазон дат самих событий, напоминания которых попадут в очередь.
+function eventOccurrenceRange(staleBefore, horizonEnd, reminder) {
+  const amount = Number(reminder.amount);
+  if (!Number.isInteger(amount) || amount < 0 || !EVENT_REMINDER_FACTORS[reminder.unit]) return null;
+  const delta = amount * EVENT_REMINDER_FACTORS[reminder.unit];
+  if (reminder.unit === 'days' || reminder.unit === 'weeks') {
+    const days = amount * (reminder.unit === 'weeks' ? 7 : 1);
+    return {
+      from: addDays(ymd(new Date(staleBefore)), days),
+      to: addDays(ymd(new Date(horizonEnd - 1)), days),
+    };
+  }
+  return {
+    from: ymd(new Date(staleBefore + delta * 60000)),
+    to: ymd(new Date(horizonEnd - 1 + delta * 60000)),
+  };
+}
+
 export function buildReminders(data, idx, now = new Date(), horizonDays = 14, defaultTime = '09:00') {
   const out = [];
   // Держим клиентское расписание в том же окне опоздания, что и сервер (6 часов).
@@ -363,12 +381,7 @@ export function buildReminders(data, idx, now = new Date(), horizonDays = 14, de
   // уже после его времени, но сервер ещё успевает его доставить.
   const staleBefore = now.getTime() - 6 * 3600 * 1000;
   const from = ymd(new Date(staleBefore));
-  // Учитываем самый длинный относительный интервал, чтобы заранее поставить уведомление
-  // даже для мероприятия, которое состоится позже стандартного горизонта.
-  const maxOffsetMinutes = (data.events || []).reduce((max, event) => Math.max(max, ...(event.reminders || [])
-    .filter((r) => EVENT_REMINDER_FACTORS[r.unit] && Number.isInteger(Number(r.amount)) && Number(r.amount) >= 0)
-    .map((r) => Number(r.amount) * EVENT_REMINDER_FACTORS[r.unit])), 0);
-  const to = addDays(ymd(now), horizonDays + Math.ceil(maxOffsetMinutes / 1440) + 1);
+  const to = addDays(ymd(now), horizonDays);
   const horizonEnd = localDate(addDays(ymd(now), horizonDays + 1), '00:00').getTime();
   const push = (id, when, title, body, tag, url) => {
     if (!when || !Number.isFinite(when.getTime()) || when.getTime() < staleBefore || when.getTime() >= horizonEnd) return;
@@ -377,31 +390,37 @@ export function buildReminders(data, idx, now = new Date(), horizonDays = 14, de
   const offset = (min) => (min || 0) * 60000;
 
   if (data.settings?.notifyEvents !== false) {
-    for (const o of expandEvents(data.events, from, to)) {
-      const e = o.ref;
-      const allDay = e.allDay || !e.start;
-      const time = allDay ? defaultTime : e.start;
-      const start = localDate(o.date, time);
-      const body = allDay ? 'Весь день' : `Время: ${e.start}`;
-
-      // Поддержка старого поля до первого сохранения события в новом редакторе.
+    for (const e of data.events || []) {
+      // Старое поле в минутах поддерживается до первого сохранения события в новом редакторе.
       if (e.reminderMin != null) {
-        const when = new Date(start.getTime() - (allDay ? 0 : offset(e.reminderMin)));
-        push(`ev:${e.id}:${o.date}`, when, e.title, body, `ev-${e.id}`, '#/calendar');
+        const legacy = { amount: e.allDay || !e.start ? 0 : Math.max(0, Number(e.reminderMin) || 0), unit: 'minutes' };
+        const range = eventOccurrenceRange(staleBefore, horizonEnd, legacy);
+        if (range) for (const o of expandEvents([e], range.from, range.to)) {
+          const allDay = e.allDay || !e.start;
+          const time = allDay ? defaultTime : e.start;
+          const start = localDate(o.date, time);
+          const when = new Date(start.getTime() - (allDay ? 0 : offset(e.reminderMin)));
+          push('ev:' + e.id + ':' + o.date, when, e.title, allDay ? 'Весь день' : 'Время: ' + e.start, 'ev-' + e.id, '#/calendar');
+        }
       }
 
-      // Новые относительные напоминания создаются отдельно для каждого повторения события.
+      // Отдельно ищем каждое относительное напоминание в ближайшем окне срабатывания.
+      // Это не разворачивает многолетние серии даже при напоминании за тысячи недель.
       for (const reminder of (e.reminders || [])) {
-        if (!EVENT_REMINDER_FACTORS[reminder.unit]) continue;
-        const when = eventReminderDate(start, reminder);
-        if (when) push(`evr:${e.id}:${o.date}:${reminder.id}`, when, e.title, body, `evr-${e.id}-${o.date}-${reminder.id}`, '#/calendar');
+        if (EVENT_REMINDER_FACTORS[reminder.unit]) {
+          const range = eventOccurrenceRange(staleBefore, horizonEnd, reminder);
+          if (!range) continue;
+          for (const o of expandEvents([e], range.from, range.to)) {
+            const allDay = e.allDay || !e.start;
+            const start = localDate(o.date, allDay ? defaultTime : e.start);
+            const when = eventReminderDate(start, reminder);
+            if (when) push('evr:' + e.id + ':' + o.date + ':' + reminder.id, when, e.title, allDay ? 'Весь день' : 'Время: ' + e.start, 'evr-' + e.id + '-' + o.date + '-' + reminder.id, '#/calendar');
+          }
+        } else if (reminder.date && reminder.time) {
+          // Старые абсолютные напоминания продолжают работать до сохранения мероприятия.
+          push('evr:' + e.id + ':' + reminder.id, localDate(reminder.date, reminder.time), e.title, 'Напоминание о событии', 'evr-' + e.id + '-' + reminder.id, '#/calendar');
+        }
       }
-    }
-
-    // Старые абсолютные напоминания продолжают работать до сохранения мероприятия в новом редакторе.
-    for (const e of data.events) for (const reminder of (e.reminders || [])) {
-      if (EVENT_REMINDER_FACTORS[reminder.unit] || !reminder.date || !reminder.time) continue;
-      push(`evr:${e.id}:${reminder.id}`, localDate(reminder.date, reminder.time), e.title, 'Напоминание о событии', `evr-${e.id}-${reminder.id}`, '#/calendar');
     }
   }
 
