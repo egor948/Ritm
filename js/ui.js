@@ -329,10 +329,12 @@ export function textInput({ value = '', placeholder = '', onInput, big = false, 
   if (autofocus) setTimeout(() => el.focus(), 420);
   return el;
 }
-export function dateInput(value, onChange, { clearable = true } = {}) {
+export function dateInput(value, onChange, { clearable = true, min = null, max = null } = {}) {
   const inp = h('input', {
     class: 'inp dt',
     type: 'date',
+    min,
+    max,
     onchange: (e) => onChange(e.target.value || null),
   });
   inp.value = value || '';
