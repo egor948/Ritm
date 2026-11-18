@@ -698,3 +698,9 @@ small { font-size: 12px; }
 
 /* Keep iOS from applying automatic scroll anchoring to sheet DOM changes. */
 .sheet-body { overflow-anchor: none; scroll-behavior: auto; }
+
+
+/* Внутренние панели выбора даты и времени */
+.dt-trigger { cursor: pointer; text-align: right; }
+.picker-content { display: flex; justify-content: center; align-items: center; min-height: 190px; padding: 28px 8px; }
+.picker-native { min-width: 190px; min-height: 48px; font-size: 20px !important; text-align: center; }
