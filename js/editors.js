@@ -46,32 +46,57 @@ function editorShell({ title, draft, draw, onSave, onDelete, deleteLabel = 'Уд
 function remindersGroup(d, redraw, defaultDate) {
   if (!Array.isArray(d.reminders)) d.reminders = [];
   const list = h('div', { class: 'reminder-list' });
-  d.reminders.forEach((reminder, i) => {
-    // Дата и время обязательны: пустое значение сразу восстанавливается.
+  let addButton;
+
+  const updateLabels = () => {
+    list.querySelectorAll('.reminder-card').forEach((card, i) => {
+      const label = card.querySelector('.reminder-card-title span');
+      if (label) label.textContent = `Напоминание ${i + 1}`;
+    });
+  };
+
+  const makeCard = (reminder) => {
     reminder.id = reminder.id || uid();
     reminder.date = reminder.date || defaultDate || todayStr();
     reminder.time = reminder.time || '09:00';
+
     const date = dateInput(reminder.date, (v) => {
       if (v) reminder.date = v;
-      else redraw();
+      else date.querySelector('input').value = reminder.date;
     }, { clearable: false });
     const time = timeInput(reminder.time, (v) => {
       if (v) reminder.time = v;
-      else redraw();
+      else time.querySelector('input').value = reminder.time;
     }, { clearable: false });
-    list.appendChild(h('div', { class: 'reminder-card', 'data-scroll-anchor': `reminder:${reminder.id}` },
+
+    const card = h('div', { class: 'reminder-card', 'data-scroll-anchor': `reminder:${reminder.id}` },
       h('div', { class: 'reminder-card-head' },
-        h('div', { class: 'reminder-card-title' }, ic('bell', 16), h('span', {}, `Напоминание ${i + 1}`)),
-        h('button', { type: 'button', class: 'reminder-remove', onclick: () => { d.reminders.splice(i, 1); redraw(); }, 'aria-label': 'Удалить напоминание' }, ic('x', 15))),
+        h('div', { class: 'reminder-card-title' }, ic('bell', 16), h('span', {}, 'Напоминание')),
+        h('button', { type: 'button', class: 'reminder-remove', 'aria-label': 'Удалить напоминание', onclick: () => {
+          const index = d.reminders.findIndex((item) => item.id === reminder.id);
+          if (index < 0) return;
+          d.reminders.splice(index, 1);
+          card.remove();
+          updateLabels();
+        } }, ic('x', 15))),
       h('div', { class: 'reminder-fields' },
         h('label', { class: 'reminder-field' }, h('span', {}, 'Дата'), date),
-        h('label', { class: 'reminder-field' }, h('span', {}, 'Время'), time))));
-  });
-  list.appendChild(h('button', {
+        h('label', { class: 'reminder-field' }, h('span', {}, 'Время'), time)));
+    return card;
+  };
+
+  d.reminders.forEach((reminder) => list.appendChild(makeCard(reminder)));
+  addButton = h('button', {
     type: 'button',
     class: 'reminder-add',
-    onclick: () => { d.reminders.push({ id: uid(), date: defaultDate || todayStr(), time: '09:00' }); redraw(); },
-  }, ic('plus', 17), 'Добавить напоминание'));
+    onclick: () => {
+      const reminder = { id: uid(), date: defaultDate || todayStr(), time: '09:00' };
+      d.reminders.push(reminder);
+      list.insertBefore(makeCard(reminder), addButton);
+      updateLabels();
+    },
+  }, ic('plus', 17), 'Добавить напоминание');
+  list.appendChild(addButton);
   return list;
 }
 
@@ -139,49 +164,72 @@ export function editTask(task, defaults = {}) {
         groupTitle('Приоритет'),
         group(h('div', { class: 'row' }, seg({ options: [{ v: 0, label: 'Нет' }, { v: 1, label: '!' }, { v: 2, label: '!!' }, { v: 3, label: '!!!' }], value: d.priority || 0, onChange: (v) => (d.priority = v) }))),
         groupTitle('Чек-лист'),
-        checklistGroup(d, redraw, body),
+        checklistGroup(d),
       );
     },
   });
 }
 
-function checklistGroup(d, redraw, body) {
+function checklistGroup(d) {
   const g = h('div', { class: 'group' });
-  const focusItem = (id) => setTimeout(() => {
-    const input = body.querySelector(`[data-check-id="${id}"] .inp`);
-    if (input) input.focus({ preventScroll: true });
-  }, 30);
-  d.checklist.forEach((c, i) => {
-    c.id = c.id || uid();
-    const inp = textInput({ value: c.text, placeholder: 'Пункт', onInput: (v) => (c.text = v) });
-    inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const next = { id: uid(), text: '', done: false };
-        d.checklist.splice(i + 1, 0, next);
-        redraw();
-        focusItem(next.id);
-      }
-    });
-    g.appendChild(h('div', {
-      class: 'row check-row',
-      'data-check-id': c.id,
-      'data-scroll-anchor': `checklist:${c.id}`,
-    },
-      h('button', { type: 'button', class: 'mini-chk' + (c.done ? ' on' : ''), onclick: (e) => { c.done = !c.done; e.currentTarget.classList.toggle('on', c.done); } }, ic('check', 14)),
-      h('div', { class: 'row-label grow' }, inp),
-      h('button', { type: 'button', class: 'mini-x vis', onclick: () => { d.checklist.splice(i, 1); redraw(); }, 'aria-label': 'Удалить пункт' }, ic('x', 14))));
+  const focusWithoutScroll = (input) => requestAnimationFrame(() => {
+    if (input && input.isConnected) input.focus({ preventScroll: true });
   });
-  g.appendChild(h('button', {
+
+  const makeRow = (item) => {
+    item.id = item.id || uid();
+    const inp = textInput({ value: item.text, placeholder: 'Пункт', onInput: (v) => (item.text = v) });
+    const rowEl = h('div', {
+      class: 'row check-row',
+      'data-check-id': item.id,
+      'data-scroll-anchor': `checklist:${item.id}`,
+    },
+      h('button', { type: 'button', class: 'mini-chk' + (item.done ? ' on' : ''), onclick: (e) => {
+        item.done = !item.done;
+        e.currentTarget.classList.toggle('on', item.done);
+      } }, ic('check', 14)),
+      h('div', { class: 'row-label grow' }, inp),
+      h('button', { type: 'button', class: 'mini-x vis', 'aria-label': 'Удалить пункт', onclick: () => {
+        const index = d.checklist.findIndex((entry) => entry.id === item.id);
+        if (index < 0) return;
+        const next = d.checklist[index + 1] || d.checklist[index - 1];
+        d.checklist.splice(index, 1);
+        rowEl.remove();
+        if (next) {
+          const nextInput = g.querySelector(`[data-check-id="${next.id}"] .inp`);
+          // Не перемещаем страницу при восстановлении фокуса после удаления.
+          if (document.activeElement === inp) focusWithoutScroll(nextInput);
+        }
+      } }, ic('x', 14)));
+
+    inp.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const index = d.checklist.findIndex((entry) => entry.id === item.id);
+      if (index < 0) return;
+      const next = { id: uid(), text: '', done: false };
+      d.checklist.splice(index + 1, 0, next);
+      const nextRow = makeRow(next);
+      g.insertBefore(nextRow, rowEl.nextSibling);
+      focusWithoutScroll(nextRow.querySelector('.inp'));
+    });
+    return rowEl;
+  };
+
+  const addButton = h('button', {
     type: 'button',
     class: 'row-btn',
     onclick: () => {
       const item = { id: uid(), text: '', done: false };
       d.checklist.push(item);
-      redraw();
-      focusItem(item.id);
+      const row = makeRow(item);
+      g.insertBefore(row, addButton);
+      focusWithoutScroll(row.querySelector('.inp'));
     },
-  }, ic('plus', 18), ' Добавить пункт'));
+  }, ic('plus', 18), ' Добавить пункт');
+
+  d.checklist.forEach((item) => g.appendChild(makeRow(item)));
+  g.appendChild(addButton);
   return g;
 }
 
