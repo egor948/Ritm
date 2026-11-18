@@ -11,6 +11,7 @@ import { openGoalDetail, progressLabel } from './goals.js';
 import { openHabitDetail } from './habits.js';
 import { openSettings, openWidgetsEditor } from './settings.js';
 import { filterTasks } from './tasks.js';
+import { isTaskInCompletionWindow } from './task-completion.js';
 
 const WIDE = new Set(['habits', 'agenda', 'tasks', 'goals', 'week']);
 const TITLES = {
@@ -101,7 +102,7 @@ const RENDER = {
   },
 
   tasks({ data, today }, i) {
-    const open = data.tasks.filter((t) => !t.done && t.date && t.date <= today).sort((a, b) => (a.date < today ? -1 : 0) - (b.date < today ? -1 : 0) || (a.time || '99').localeCompare(b.time || '99') || (b.priority || 0) - (a.priority || 0));
+    const open = data.tasks.filter((t) => (!t.done || isTaskInCompletionWindow(t.id)) && t.date && t.date <= today).sort((a, b) => (a.date < today ? -1 : 0) - (b.date < today ? -1 : 0) || (a.time || '99').localeCompare(b.time || '99') || (b.priority || 0) - (a.priority || 0));
     const doneToday = data.tasks.filter((t) => t.done && t.date === today);
     const shown = open.slice(0, 5);
     const body = h('div', { class: 'w-tasks' },
