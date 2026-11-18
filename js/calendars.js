@@ -102,7 +102,7 @@ function openCalendarEditor(calendar, onSaved) {
   return api;
 }
 
-export function openCalendarManager(onFilters) {
+export function openCalendarManager(onFilters, onSelectCalendar) {
   let api;
   const draw = () => {
     const data = S.data();
@@ -118,6 +118,7 @@ export function openCalendarManager(onFilters) {
           class: 'calendar-manage-open' + (selected ? ' selected' : ''),
           onclick: () => {
             if (calendar.visible === false) S.upsert('calendars', { id: calendar.id, visible: true });
+            if (onSelectCalendar) onSelectCalendar(calendar.id);
             S.setSettings({ calFilters: { ...(S.settings().calFilters || {}), calendarId: calendar.id }, calView: 'agenda' });
             api.close(true);
             document.dispatchEvent(new CustomEvent('rerender'));
@@ -143,6 +144,7 @@ export function openCalendarManager(onFilters) {
         type: 'button',
         class: 'calendar-show-all' + (!activeId ? ' selected' : ''),
         onclick: () => {
+          if (onSelectCalendar) onSelectCalendar(null);
           S.setSettings({ calFilters: { ...(S.settings().calFilters || {}), calendarId: null }, calView: 'agenda' });
           api.close(true);
           document.dispatchEvent(new CustomEvent('rerender'));
