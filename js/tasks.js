@@ -51,7 +51,7 @@ export function tasksScreen() {
   const listHost = h('div', { class: 'task-groups' });
   function renderList() {
     clear(listHost);
-    let list = query.trim() ? data.tasks.filter((t) => (f === 'done' || !t.done || isTaskInCompletionWindow(t.id)) && (t.title.toLowerCase().includes(query.trim().toLowerCase()) || (t.notes || '').toLowerCase().includes(query.trim().toLowerCase()))) : filterTasks(data.tasks, f);
+    let list = query.trim() ? data.tasks.filter((t) => (f === 'done' ? t.done : (!t.done || isTaskInCompletionWindow(t.id))) && (t.title.toLowerCase().includes(query.trim().toLowerCase()) || (t.notes || '').toLowerCase().includes(query.trim().toLowerCase()))) : filterTasks(data.tasks, f);
     const title = FILTERS.find((x) => x.v === f).label;
     if (!list.length) {
       listHost.appendChild(emptyState({
