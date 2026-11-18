@@ -273,10 +273,15 @@ small { font-size: 12px; }
 .stepper button:active { background: var(--fill); }
 .step-val { min-width: 62px; text-align: center; font-weight: 600; font-size: 15px; padding: 0 4px; }
 .w-edit { display: flex; align-items: center; gap: 4px; }
-.widget-drag-handle { display: grid; place-items: center; flex: none; width: 36px; height: 36px; margin-left: -4px; border-radius: 10px; color: var(--label-2); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
-.widget-drag-handle:active { color: var(--accent); cursor: grabbing; }
-.widget-edit-row { transition: background 0.18s, box-shadow 0.18s, transform 0.18s; }
-.widget-edit-row.dragging { position: relative; z-index: 2; background: color-mix(in srgb, var(--accent) 10%, var(--sheet-group)); box-shadow: 0 5px 18px rgba(0, 0, 0, 0.12); transform: scale(1.015); }
+.widget-edit-group { position: relative; }
+.widget-drag-handle { display: grid; place-items: center; flex: none; width: 38px; height: 38px; margin-left: -4px; border-radius: 11px; color: var(--label-2); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; transition: color .2s, background .2s, transform .2s; }
+.widget-drag-handle:active { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); cursor: grabbing; }
+.widget-edit-row { position: relative; z-index: 0; transition: background .22s, box-shadow .22s; }
+.widget-edit-row.drag-source { z-index: 0; pointer-events: none; }
+.widget-drop-placeholder { position: relative; z-index: 1; box-sizing: border-box; margin: 5px 9px; border: 1.5px dashed color-mix(in srgb, var(--accent) 62%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--accent) 9%, var(--sheet-group)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 5%, transparent); transition: height .22s cubic-bezier(.22,1,.36,1), background .22s; }
+.widget-edit-group > .widget-drop-placeholder + .widget-edit-row { border-top: 0; }
+.widget-drag-preview { position: fixed !important; z-index: 10000 !important; display: flex !important; align-items: center; box-sizing: border-box; margin: 0 !important; pointer-events: none !important; opacity: .98 !important; border-radius: 14px; background: var(--sheet-group); box-shadow: 0 16px 38px rgba(0,0,0,.2), 0 3px 9px rgba(0,0,0,.08); outline: 1px solid color-mix(in srgb, var(--accent) 15%, transparent); transform: scale(1.025); will-change: top, transform; }
+.widget-edit-group > .widget-drag-preview { display: none !important; }
 .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .tile { background: var(--sheet-group); border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 3px; transition: transform 0.35s var(--spring); }
 .tile:active { transform: scale(0.95); }
