@@ -85,6 +85,9 @@ function openCalendarEditor(calendar, onSaved) {
                       { kind: 'calendars', rec: { ...calendar, deleted: true } },
                     ];
                     const inverse = S.applyChanges(changes);
+                    if (S.settings().calFilters?.calendarId === calendar.id) {
+                      S.setSettings({ calFilters: { ...(S.settings().calFilters || {}), calendarId: null } });
+                    }
                     sheet.close(true);
                     onSaved && onSaved();
                     toast('Календарь удалён', { label: 'Отменить', onClick: () => S.undo(inverse) });
@@ -126,7 +129,13 @@ export function openCalendarManager(onFilters) {
             h('small', null, `${count} ${plural(count, ['событие', 'события', 'событий'])} · ${calendar.visible === false ? 'Скрыт' : 'Показывается'}`)),
           selected ? h('span', { class: 'calendar-selected-mark' }, ic('check', 16)) : null),
         h('button', { type: 'button', class: 'calendar-manage-edit', 'aria-label': 'Настроить календарь', onclick: () => openCalendarEditor(calendar, draw) }, ic('edit', 17)),
-        toggle(calendar.visible !== false, (visible) => { S.upsert('calendars', { id: calendar.id, visible }); draw(); }),
+        toggle(calendar.visible !== false, (visible) => {
+          S.upsert('calendars', { id: calendar.id, visible });
+          if (!visible && S.settings().calFilters?.calendarId === calendar.id) {
+            S.setSettings({ calFilters: { ...(S.settings().calFilters || {}), calendarId: null } });
+          }
+          draw();
+        }),
       );
     });
     api.body.append(
