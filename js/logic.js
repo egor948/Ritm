@@ -206,7 +206,7 @@ const occurrence = (ev, date) => ({ type: 'event', id: ev.id, key: `${ev.id}@${d
 // Элементы дня для календаря
 // =====================================================================
 
-const taskDuration = (t) => t.duration || 30;
+const TASK_CALENDAR_SLOT_MINUTES = 30; // Только визуальный размер блока, не свойство задачи.
 
 /**
  * Всё, что относится к дню. Возвращает группы для отображения.
@@ -240,7 +240,7 @@ export function dayItems(data, date, opts = {}) {
       const color = goalColor(t.goalId) || 'indigo';
       if (t.time) {
         const s = toMin(t.time);
-        timed.push({ type: 'task', id: t.id, key: `${t.id}@${date}`, date, ref: t, title: t.title, color, startMin: s, endMin: Math.min(1440, s + taskDuration(t)), done: t.done });
+        timed.push({ type: 'task', id: t.id, key: `${t.id}@${date}`, date, ref: t, title: t.title, color, startMin: s, endMin: Math.min(1440, s + TASK_CALENDAR_SLOT_MINUTES), done: t.done });
       } else dated.push({ type: 'task', id: t.id, key: `${t.id}@${date}`, date, ref: t, title: t.title, color, done: t.done });
     }
   }
