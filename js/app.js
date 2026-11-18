@@ -28,7 +28,7 @@ const tabbar = document.getElementById('tabbar');
 function buildTabbar() {
   clear(tabbar);
   tabbar.appendChild(h('div', { class: 'sidebar-brand', 'aria-label': 'Ритм' },
-    h('span', { class: 'sidebar-brand-mark' }, ic('activity', 22)),
+    h('img', { class: 'sidebar-brand-logo', src: 'icons/icon-192.png', alt: '' }),
     h('span', null, 'Ритм')));
   TABS.forEach((t) => {
     const b = h('button', { class: 'tab' + (t.id === current ? ' on' : ''), 'data-tab': t.id, 'aria-label': t.label, onclick: () => go(t.id) }, h('span', { class: 'tab-ic' }, ic(t.icon, 25)), h('span', { class: 'tab-label' }, t.label));
