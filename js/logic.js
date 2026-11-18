@@ -342,6 +342,7 @@ export function buildReminders(data, idx, now = new Date(), horizonDays = 14, de
   const offset = (min) => (min || 0) * 60000;
 
   if (data.settings?.notifyEvents !== false) {
+    // Старое напоминание «перед началом» сохраняет поведение повторяющихся событий.
     for (const o of expandEvents(data.events, from, to)) {
       const e = o.ref;
       if (e.reminderMin == null) continue;
@@ -351,16 +352,28 @@ export function buildReminders(data, idx, now = new Date(), horizonDays = 14, de
       const body = e.allDay || !e.start ? 'Весь день' : `Время: ${e.start}`;
       push(`ev:${e.id}:${o.date}`, when, e.title, body, `ev-${e.id}`, '#/calendar');
     }
+    // Новые независимые напоминания имеют собственные дату и время и не сдвигаются вместе с событием.
+    for (const e of data.events) for (const r of (e.reminders || [])) {
+      if (!r.date || !r.time) continue;
+      push(`evr:${e.id}:${r.id}`, localDate(r.date, r.time), e.title, 'Напоминание о событии', `evr-${e.id}-${r.id}`, '#/calendar');
+    }
   }
 
   if (data.settings?.notifyTasks !== false) {
     for (const t of data.tasks) {
-      if (t.done || !t.date || t.date < from || t.date > to) continue;
-      if (t.time && t.reminderMin != null) {
-        const when = new Date(localDate(t.date, t.time).getTime() - offset(t.reminderMin));
-        push(`tk:${t.id}`, when, t.title, `Время: ${t.time}`, `tk-${t.id}`, '#/tasks');
-      } else if (!t.time && t.remindAt) {
-        push(`tk:${t.id}`, localDate(t.date, t.remindAt), t.title, `Время: ${t.remindAt}`, `tk-${t.id}`, '#/tasks');
+      if (t.done) continue;
+      // Поддержка старых записей до их первого сохранения в новом редакторе.
+      if (!Array.isArray(t.reminders) || !t.reminders.length) {
+        if (t.date && t.time && t.reminderMin != null) {
+          const when = new Date(localDate(t.date, t.time).getTime() - offset(t.reminderMin));
+          push(`tk:${t.id}`, when, t.title, `Время: ${t.time}`, `tk-${t.id}`, '#/tasks');
+        } else if (t.date && !t.time && t.remindAt) {
+          push(`tk:${t.id}`, localDate(t.date, t.remindAt), t.title, `Время: ${t.remindAt}`, `tk-${t.id}`, '#/tasks');
+        }
+      }
+      for (const r of (t.reminders || [])) {
+        if (!r.date || !r.time) continue;
+        push(`tkr:${t.id}:${r.id}`, localDate(r.date, r.time), t.title, 'Напоминание о задаче', `tkr-${t.id}-${r.id}`, '#/tasks');
       }
     }
   }
