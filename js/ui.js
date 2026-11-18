@@ -161,6 +161,51 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
   document.getElementById('sheets').appendChild(layer);
 
   let closed = false;
+  let stableBodyScrollTop = body.scrollTop;
+  let pointerScrollTop = null;
+  let restoreTimer1 = null;
+  let restoreTimer2 = null;
+  let restoringScroll = false;
+  let scrollObserver = null;
+
+  const restoreBodyPosition = (top) => {
+    stableBodyScrollTop = Math.max(0, Number(top) || 0);
+    restoringScroll = true;
+    const apply = () => {
+      if (closed || !body.isConnected) return;
+      body.scrollTop = stableBodyScrollTop;
+    };
+    requestAnimationFrame(() => {
+      apply();
+      requestAnimationFrame(apply);
+    });
+    clearTimeout(restoreTimer1);
+    clearTimeout(restoreTimer2);
+    restoreTimer1 = setTimeout(apply, 90);
+    restoreTimer2 = setTimeout(() => {
+      apply();
+      restoringScroll = false;
+      pointerScrollTop = null;
+    }, 320);
+  };
+
+  const rememberBodyPosition = () => {
+    if (!restoringScroll && pointerScrollTop == null) stableBodyScrollTop = body.scrollTop;
+  };
+  const onBodyPointerDown = (event) => {
+    if (event.target.closest && event.target.closest('button')) {
+      pointerScrollTop = body.scrollTop;
+      stableBodyScrollTop = pointerScrollTop;
+    }
+  };
+  const onBodyClickCapture = (event) => {
+    if (pointerScrollTop == null) return;
+    // Capture runs before the button handler; restoring is deferred until after
+    // its DOM changes and the iOS touch/click sequence have completed.
+    restoreBodyPosition(pointerScrollTop);
+  };
+
+  let closed = false;
   const api = {
     body, sheet,
     setTitle: (t) => { titleEl.textContent = t; },
@@ -174,6 +219,12 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
       layer.classList.remove('show');
       sheet.style.transform = '';
       if (window.visualViewport) { window.visualViewport.removeEventListener('resize', fit); window.visualViewport.removeEventListener('scroll', fit); }
+      body.removeEventListener('scroll', rememberBodyPosition);
+      body.removeEventListener('pointerdown', onBodyPointerDown, true);
+      body.removeEventListener('click', onBodyClickCapture, true);
+      if (scrollObserver) scrollObserver.disconnect();
+      clearTimeout(restoreTimer1);
+      clearTimeout(restoreTimer2);
       setTimeout(() => layer.remove(), 380);
       if (!silent && onClose) onClose();
     },
@@ -186,9 +237,12 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
   const fit = () => {
     const vv = window.visualViewport;
     if (!vv) return;
+    const savedTop = pointerScrollTop == null ? stableBodyScrollTop : pointerScrollTop;
     layer.style.top = vv.offsetTop + 'px';
     layer.style.height = vv.height + 'px';
     layer.style.bottom = 'auto';
+    // iOS may reset a nested overflow scroller when the visual viewport moves.
+    restoreBodyPosition(savedTop);
   };
   if (window.visualViewport) { window.visualViewport.addEventListener('resize', fit); window.visualViewport.addEventListener('scroll', fit); }
 
@@ -219,6 +273,19 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
   head.addEventListener('pointercancel', end);
 
   build(api);
+
+  // Keep the editor's own scroll container stable across iOS DOM/layout changes.
+  body.addEventListener('scroll', rememberBodyPosition, { passive: true });
+  body.addEventListener('pointerdown', onBodyPointerDown, true);
+  body.addEventListener('click', onBodyClickCapture, true);
+  if (typeof MutationObserver !== 'undefined') {
+    scrollObserver = new MutationObserver(() => {
+      const savedTop = pointerScrollTop == null ? stableBodyScrollTop : pointerScrollTop;
+      restoreBodyPosition(savedTop);
+    });
+    scrollObserver.observe(body, { childList: true, subtree: true });
+  }
+
   openSheets.push(api);
   requestAnimationFrame(() => requestAnimationFrame(() => layer.classList.add('show')));
   return api;
