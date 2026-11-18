@@ -273,6 +273,10 @@ small { font-size: 12px; }
 .stepper button:active { background: var(--fill); }
 .step-val { min-width: 62px; text-align: center; font-weight: 600; font-size: 15px; padding: 0 4px; }
 .w-edit { display: flex; align-items: center; gap: 4px; }
+.widget-drag-handle { display: grid; place-items: center; flex: none; width: 36px; height: 36px; margin-left: -4px; border-radius: 10px; color: var(--label-2); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.widget-drag-handle:active { color: var(--accent); cursor: grabbing; }
+.widget-edit-row { transition: background 0.18s, box-shadow 0.18s, transform 0.18s; }
+.widget-edit-row.dragging { position: relative; z-index: 2; background: color-mix(in srgb, var(--accent) 10%, var(--sheet-group)); box-shadow: 0 5px 18px rgba(0, 0, 0, 0.12); transform: scale(1.015); }
 .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .tile { background: var(--sheet-group); border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 3px; transition: transform 0.35s var(--spring); }
 .tile:active { transform: scale(0.95); }
