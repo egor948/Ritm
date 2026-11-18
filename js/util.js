@@ -185,3 +185,41 @@ export const clear = (el) => {
   while (el.firstChild) el.removeChild(el.firstChild);
   return el;
 };
+
+
+// ---------- Устойчивое сохранение позиции прокрутки при перерисовке ----------
+export function captureScrollPosition(scroller) {
+  if (!scroller) return null;
+  const viewport = scroller.getBoundingClientRect();
+  let anchor = null;
+  for (const el of scroller.querySelectorAll('[data-scroll-anchor]')) {
+    const rect = el.getBoundingClientRect();
+    if (rect.bottom <= viewport.top + 1 || rect.top >= viewport.bottom) continue;
+    anchor = { key: el.getAttribute('data-scroll-anchor'), offset: rect.top - viewport.top };
+    break;
+  }
+  return { top: scroller.scrollTop, anchor };
+}
+
+export function restoreScrollPosition(scroller, saved) {
+  if (!scroller || !saved) return;
+  const restore = () => {
+    if (!scroller.isConnected) return;
+    if (saved.anchor) {
+      const el = [...scroller.querySelectorAll('[data-scroll-anchor]')]
+        .find((node) => node.getAttribute('data-scroll-anchor') === saved.anchor.key);
+      if (el) {
+        const viewport = scroller.getBoundingClientRect();
+        const rect = el.getBoundingClientRect();
+        scroller.scrollTop += rect.top - viewport.top - saved.anchor.offset;
+        return;
+      }
+    }
+    scroller.scrollTop = saved.top;
+  };
+  // WebKit на iOS пересчитывает высоту контейнера после обновления DOM.
+  requestAnimationFrame(() => {
+    restore();
+    requestAnimationFrame(restore);
+  });
+}
