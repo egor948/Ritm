@@ -31,8 +31,12 @@ function ensureCalendarState(s) {
     if (base.visible == null) base.visible = true;
   }
   for (const event of s.events || []) {
-    if (!event.deleted && !event.calendarId) {
-      event.calendarId = DEFAULT_CALENDAR_ID;
+    if (event.deleted) continue;
+    let changed = false;
+    if (!event.calendarId) { event.calendarId = DEFAULT_CALENDAR_ID; changed = true; }
+    // Старые события сохраняют свой прежний цвет; новые по умолчанию наследуют цвет календаря.
+    if (event.colorOverride == null) { event.colorOverride = true; changed = true; }
+    if (changed) {
       event.updatedAt = Math.max(event.updatedAt || 0, now);
       s.dirty[`events:${event.id}`] = 1;
     }
