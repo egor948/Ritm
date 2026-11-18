@@ -1,5 +1,5 @@
 // UI-кит: иконки, кольца прогресса, сегменты, переключатели, шиты, тосты, элементы форм.
-import { h, clamp, COLOR_KEYS, clear, append, todayStr, addMonths, daysInMonth, parseYmd, ymd, dow, MONTHS_NOM, pad } from './util.js';
+import { h, clamp, COLOR_KEYS, clear, append } from './util.js';
 
 // ---------------------------------------------------------------- иконки
 const ICONS = {
@@ -329,177 +329,22 @@ export function textInput({ value = '', placeholder = '', onInput, big = false, 
   if (autofocus) setTimeout(() => el.focus(), 420);
   return el;
 }
-function formatDateValue(value) {
-  if (!value) return '';
-  const date = parseYmd(value);
-  return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-}
-
-function openDatePicker(value, onSave) {
-  let draft = value || todayStr();
-  let shownMonth = draft.slice(0, 7) + '-01';
-
-  openSheet({
-    title: 'Выбор даты',
-    left: { label: 'Отмена' },
-    right: { label: 'Готово', bold: true, onClick: (api) => {
-      api.close(true);
-      onSave(draft);
-    } },
-    cls: 'value-picker date-picker-sheet',
-    build(api) {
-      const render = () => {
-        const monthDate = parseYmd(shownMonth);
-        const year = monthDate.getFullYear();
-        const month = monthDate.getMonth();
-        const offset = (dow(shownMonth) + 6) % 7;
-        const count = daysInMonth(shownMonth);
-        const cellsCount = Math.ceil((offset + count) / 7) * 7;
-        const today = todayStr();
-
-        const monthTitle = h('div', { class: 'picker-month-title' },
-          h('button', { type: 'button', class: 'picker-nav', 'aria-label': 'Предыдущий месяц', onclick: () => { shownMonth = addMonths(shownMonth, -1); render(); } }, ic('chevL', 19)),
-          h('b', {}, MONTHS_NOM[month] + ' ' + year),
-          h('button', { type: 'button', class: 'picker-nav', 'aria-label': 'Следующий месяц', onclick: () => { shownMonth = addMonths(shownMonth, 1); render(); } }, ic('chevR', 19))
-        );
-
-        const weekdays = h('div', { class: 'picker-weekdays' },
-          ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((day) => h('span', {}, day))
-        );
-
-        const days = h('div', { class: 'picker-days' });
-        for (let i = 0; i < cellsCount; i++) {
-          const day = i - offset + 1;
-          if (day < 1 || day > count) {
-            days.appendChild(h('span', { class: 'picker-day empty' }));
-            continue;
-          }
-          const date = ymd(new Date(year, month, day));
-          const classes = ['picker-day'];
-          if (date === draft) classes.push('selected');
-          if (date === today) classes.push('today');
-          days.appendChild(h('button', {
-            type: 'button',
-            class: classes.join(' '),
-            'aria-pressed': date === draft ? 'true' : 'false',
-            onclick: () => { draft = date; render(); },
-          }, String(day)));
-        }
-
-        clear(api.body);
-        api.body.appendChild(h('div', { class: 'picker-calendar' },
-          monthTitle,
-          weekdays,
-          days,
-          h('div', { class: 'picker-selected-date' }, 'Выбрано: ' + formatDateValue(draft))
-        ));
-      };
-      render();
-    },
-  });
-}
-
-function openTimePicker(value, onSave) {
-  const now = new Date();
-  const parts = typeof value === 'string' && /^\d{2}:\d{2}$/.test(value)
-    ? value.split(':').map(Number)
-    : [now.getHours(), now.getMinutes()];
-  let hour = clamp(parts[0], 0, 23);
-  let minute = clamp(parts[1], 0, 59);
-
-  openSheet({
-    title: 'Выбор времени',
-    left: { label: 'Отмена' },
-    right: { label: 'Готово', bold: true, onClick: (api) => {
-      const selected = pad(hour) + ':' + pad(minute);
-      api.close(true);
-      onSave(selected);
-    } },
-    cls: 'value-picker time-picker-sheet',
-    build(api) {
-      const preview = h('div', { class: 'picker-time-preview' }, pad(hour) + ':' + pad(minute));
-
-      const makeWheel = (label, count, initial, onChange) => {
-        let selected = initial;
-        const buttons = [];
-        const list = h('div', { class: 'picker-wheel-list', role: 'listbox', 'aria-label': label });
-        const update = (index) => {
-          selected = index;
-          buttons.forEach((button, i) => {
-            button.classList.toggle('selected', i === selected);
-            button.setAttribute('aria-selected', i === selected ? 'true' : 'false');
-          });
-          onChange(index);
-        };
-        for (let i = 0; i < count; i++) {
-          const button = h('button', {
-            type: 'button',
-            class: 'picker-wheel-item' + (i === selected ? ' selected' : ''),
-            role: 'option',
-            'aria-selected': i === selected ? 'true' : 'false',
-            onclick: () => {
-              update(i);
-              list.scrollTo({ top: i * 44, behavior: 'smooth' });
-            },
-          }, pad(i));
-          buttons.push(button);
-          list.appendChild(button);
-        }
-
-        let frame = 0;
-        list.addEventListener('scroll', () => {
-          if (frame) cancelAnimationFrame(frame);
-          frame = requestAnimationFrame(() => {
-            const index = clamp(Math.round(list.scrollTop / 44), 0, count - 1);
-            if (index !== selected) update(index);
-          });
-        }, { passive: true });
-
-        requestAnimationFrame(() => { list.scrollTop = selected * 44; });
-        return h('div', { class: 'picker-wheel' },
-          h('div', { class: 'picker-wheel-label' }, label),
-          list
-        );
-      };
-
-      const hourWheel = makeWheel('Часы', 24, hour, (v) => {
-        hour = v;
-        preview.textContent = pad(hour) + ':' + pad(minute);
-      });
-      const minuteWheel = makeWheel('Минуты', 60, minute, (v) => {
-        minute = v;
-        preview.textContent = pad(hour) + ':' + pad(minute);
-      });
-
-      api.body.appendChild(h('div', { class: 'picker-time' },
-        preview,
-        h('div', { class: 'picker-time-wheels' }, hourWheel, h('span', { class: 'picker-time-colon' }, ':'), minuteWheel)
-      ));
-    },
-  });
-}
-
 export function dateInput(value, onChange, { clearable = true } = {}) {
   const inp = h('input', {
-    class: 'inp dt dt-trigger',
-    type: 'text',
-    readonly: true,
-    'aria-label': 'Выбрать дату',
-    onclick: () => openDatePicker(value, (v) => { inp.value = formatDateValue(v); onChange(v); }),
+    class: 'inp dt',
+    type: 'date',
+    onchange: (e) => onChange(e.target.value || null),
   });
-  inp.value = formatDateValue(value);
+  inp.value = value || '';
   const wrap = h('div', { class: 'dt-wrap' }, inp,
     clearable && value ? h('button', { type: 'button', class: 'mini-x', 'aria-label': 'Очистить', onclick: () => { inp.value = ''; onChange(null); wrap.querySelector('.mini-x').remove(); } }, ic('x', 14)) : null);
   return wrap;
 }
-
 export function timeInput(value, onChange, { clearable = true } = {}) {
   const inp = h('input', {
-    class: 'inp dt dt-trigger',
-    type: 'text',
-    readonly: true,
-    'aria-label': 'Выбрать время',
-    onclick: () => openTimePicker(value, (v) => { inp.value = v; onChange(v); }),
+    class: 'inp dt',
+    type: 'time',
+    onchange: (e) => onChange(e.target.value || null),
   });
   inp.value = value || '';
   const wrap = h('div', { class: 'dt-wrap' }, inp,
