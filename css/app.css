@@ -280,12 +280,63 @@ small { font-size: 12px; }
 .widget-edit-row.drag-source { z-index: 0; pointer-events: none; }
 .widget-drop-placeholder { position: relative; z-index: 1; box-sizing: border-box; margin: 5px 9px; border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent); border-radius: 15px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--sheet-group)), color-mix(in srgb, var(--accent) 5%, var(--sheet-group))); box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 2px 12px color-mix(in srgb, var(--accent) 8%, transparent); transition: height .22s cubic-bezier(.22,1,.36,1), background .22s, box-shadow .22s; }
 .widget-edit-group > .widget-drop-placeholder + .widget-edit-row { border-top: 0; }
-.widget-edit-row .switch {
-  transition: background 380ms cubic-bezier(.25, .8, .25, 1);
+.widget-switch-control {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 51px;
+  height: 31px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.widget-edit-row .switch::after {
-  transition: transform 420ms cubic-bezier(.22, 1, .36, 1);
+.widget-switch-input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.widget-switch-track {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: 16px;
+  background-color: var(--fill);
+  pointer-events: none;
+  transition: background-color 460ms cubic-bezier(.2, .8, .2, 1);
+}
+.widget-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .22), 0 0 1px rgba(0, 0, 0, .12);
+  transform: translate3d(0, 0, 0);
+  transition: transform 500ms cubic-bezier(.22, 1, .36, 1);
   will-change: transform;
+}
+.widget-switch-input:checked + .widget-switch-track {
+  background-color: var(--c-green);
+}
+.widget-switch-input:checked + .widget-switch-track .widget-switch-thumb {
+  transform: translate3d(20px, 0, 0);
+}
+.widget-switch-input:focus-visible + .widget-switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .widget-switch-track,
+  .widget-switch-thumb { transition-duration: .01ms; }
 }
 .widget-drag-preview { position: fixed !important; z-index: 10000 !important; display: flex !important; align-items: center; box-sizing: border-box; margin: 0 !important; pointer-events: none !important; opacity: .98 !important; border-radius: 15px; border: .5px solid var(--sep); background: var(--glass); -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); box-shadow: 0 18px 42px rgba(0,0,0,.19), 0 4px 12px rgba(0,0,0,.07); transform: scale(1.025); animation: widget-drag-lift .22s cubic-bezier(.22,1,.36,1) both; will-change: top, transform; }
 @keyframes widget-drag-lift { from { transform: scale(.985); opacity: .82; } to { transform: scale(1.025); opacity: .98; } }
