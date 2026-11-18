@@ -226,11 +226,12 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
       sheet.style.transform = '';
       if (window.visualViewport) { window.visualViewport.removeEventListener('resize', fit); window.visualViewport.removeEventListener('scroll', fit); }
       body.removeEventListener('scroll', rememberBodyPosition);
-      body.removeEventListener('pointerdown', rememberButtonPress, true);\n      body.removeEventListener('touchstart', rememberButtonPress, true);
+      body.removeEventListener('pointerdown', rememberButtonPress, true);
+      body.removeEventListener('touchstart', rememberButtonPress, true);
       body.removeEventListener('click', onBodyClickCapture, true);
       if (scrollObserver) scrollObserver.disconnect();
-      clearTimeout(restoreTimer1);
-      clearTimeout(restoreTimer2);
+      for (const timer of restoreTimers) clearTimeout(timer);
+      restoreTimers = [];
       setTimeout(() => layer.remove(), 380);
       if (!silent && onClose) onClose();
     },
