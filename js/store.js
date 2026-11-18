@@ -216,8 +216,20 @@ export const undo = (inverse) => applyChanges(inverse);
 
 export function setTaskDone(id, done) {
   const t = find('tasks', id);
-  if (!t) return;
-  upsert('tasks', { id, done, doneAt: done ? Date.now() : null });
+  if (!t || !!t.done === !!done) return null;
+  const previous = { done: !!t.done, doneAt: t.doneAt ?? null };
+  const doneAt = done ? Date.now() : null;
+  upsert('tasks', { id, done: !!done, doneAt });
+  return done ? { id, previous, doneAt } : null;
+}
+
+/** Отменить конкретное выполнение, не затрагивая более поздние изменения задачи. */
+export function undoTaskDone(token) {
+  if (!token) return false;
+  const t = find('tasks', token.id);
+  if (!t || !t.done || t.doneAt !== token.doneAt) return false;
+  upsert('tasks', { id: token.id, done: token.previous.done, doneAt: token.previous.doneAt });
+  return true;
 }
 
 export function setLog(habitId, date, value) {
