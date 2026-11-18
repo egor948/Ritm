@@ -283,7 +283,8 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
 
   // Keep the editor's own scroll container stable across iOS DOM/layout changes.
   body.addEventListener('scroll', rememberBodyPosition, { passive: true });
-  body.addEventListener('pointerdown', rememberButtonPress, true);\n  body.addEventListener('touchstart', rememberButtonPress, { capture: true, passive: true });
+  body.addEventListener('pointerdown', rememberButtonPress, true);
+  body.addEventListener('touchstart', rememberButtonPress, { capture: true, passive: true });
   body.addEventListener('click', onBodyClickCapture, true);
   if (typeof MutationObserver !== 'undefined') {
     scrollObserver = new MutationObserver(() => {
