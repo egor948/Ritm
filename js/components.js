@@ -5,6 +5,7 @@ import { goalProgress, habitDone, habitValue, habitTarget, habitStreaks } from '
 import { ic, cv, checkbox, burst, toast, ring } from './ui.js';
 import { editTask } from './editors.js';
 import { beginTaskCompletion, cancelTaskCompletion, isTaskExitStarted } from './task-completion.js';
+import { withTaskSwipe } from './task-swipe.js';
 
 const taskUndoToasts = new Map();
 
@@ -32,6 +33,12 @@ export const progressBar = ({ pct, color = 'blue', key, cls = '' }) => {
   return h('div', { class: 'bar ' + cls, style: { '--c': cv(color) } }, fill);
 };
 
+function clearTaskUndoToast(id) {
+  const oldToast = taskUndoToasts.get(id);
+  if (oldToast) oldToast.hide();
+  taskUndoToasts.delete(id);
+}
+
 // ---------- Отметка задачи с эффектами ----------
 export function completeTask(task, done, el) {
   const before = new Map();
@@ -42,9 +49,7 @@ export function completeTask(task, done, el) {
 
   if (!done) {
     cancelTaskCompletion(task.id);
-    const oldToast = taskUndoToasts.get(task.id);
-    if (oldToast) oldToast.hide();
-    taskUndoToasts.delete(task.id);
+    clearTaskUndoToast(task.id);
     S.setTaskDone(task.id, false);
     return;
   }
@@ -104,11 +109,15 @@ export function taskRow(task, data, { showGoal = true, showDate = true, compact 
   if ((task.reminderMin != null && task.time) || task.remindAt) meta.push(h('span', { class: 'meta' }, ic('bell', 13)));
   const popNow = popId === task.id;
   if (popNow) popId = null;
-  return h('div', { class: 'task-row' + (task.done ? ' done' : '') + (compact ? ' compact' : '') + (task.done && isTaskExitStarted(task.id) ? ' task-completion-exit' : ''), 'data-task-id': task.id, 'data-task-done': task.done ? 'true' : 'false', 'data-scroll-anchor': `task:${task.id}`, onclick: () => editTask(task) },
+  const row = h('div', { class: 'task-row' + (task.done ? ' done' : '') + (compact ? ' compact' : '') + (task.done && isTaskExitStarted(task.id) ? ' task-completion-exit' : ''), 'data-task-id': task.id, 'data-task-done': task.done ? 'true' : 'false', 'data-scroll-anchor': `task:${task.id}`, onclick: () => editTask(task) },
     checkbox({ done: task.done, color, pop: popNow, onToggle: (d, el) => completeTask(task, d, el) }),
     h('div', { class: 'task-main' },
       h('div', { class: 'task-title' }, task.title),
       meta.length ? h('div', { class: 'task-meta' }, meta) : null));
+  return withTaskSwipe(task, row, () => {
+    clearTaskUndoToast(task.id);
+    cancelTaskCompletion(task.id);
+  });
 }
 
 // ---------- Привычки ----------
