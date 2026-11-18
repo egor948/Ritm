@@ -4,7 +4,7 @@
 -- ---------------------------------------------------------------- данные приложения
 create table if not exists public.items (
   user_id    uuid   not null default auth.uid() references auth.users(id) on delete cascade,
-  kind       text   not null,               -- goals | tasks | events | habits | logs | settings
+  kind       text   not null,               -- goals | tasks | events | habits | logs | calendars | settings
   id         text   not null,
   data       jsonb  not null,
   updated_at bigint not null,               -- время правки на устройстве (мс)
