@@ -1,6 +1,7 @@
 // Экран «Сегодня»: настраиваемые виджеты.
 import { h, todayStr, addDays, greeting, fmtLong, nowMin, fromMin, fmtRemain, plural, WD_SHORT, dow, localDate } from './util.js';
 import * as S from './store.js';
+import { visibleEventsData } from './calendars.js';
 import { dayItems, dayScore, isScheduled, habitDone, habitStreaks, goalProgress, habitTarget } from './logic.js';
 import { ic, cv, ring, emptyState } from './ui.js';
 import { screen, navBtn } from './shell.js';
@@ -27,7 +28,7 @@ function widgetShell(id, i, body, { onClick, extra } = {}) {
 }
 
 export function todayScreen() {
-  const data = S.data();
+  const data = visibleEventsData(S.data());
   const today = todayStr();
   const ws = S.settings().widgets.filter((w) => w.on);
   const items = dayItems(data, today);
