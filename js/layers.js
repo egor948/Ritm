@@ -1,5 +1,5 @@
 // Детальные экраны поверх вкладок (цель, привычка) с жестом «назад» от левого края.
-import { h, clear } from './util.js';
+import { h, clear, captureScrollPosition, restoreScrollPosition } from './util.js';
 import * as S from './store.js';
 import { ic } from './ui.js';
 
@@ -28,13 +28,13 @@ export function openLayer({ render }) {
   function refresh() {
     if (closed) return;
     const old = el.querySelector('.scroll');
-    const top = old ? old.scrollTop : 0;
+    const scroll = old ? captureScrollPosition(old) : null;
     const node = render(api);
     if (!node) { api.close(); return; }
     clear(el);
     el.appendChild(node);
     const sc = el.querySelector('.scroll');
-    if (sc) sc.scrollTop = top;
+    if (sc) restoreScrollPosition(sc, scroll);
   }
   const unsub = S.subscribe(refresh);
   const onGoalDeleted = () => refresh();
