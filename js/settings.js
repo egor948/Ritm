@@ -17,6 +17,19 @@ const WIDGET_NAMES = {
   overdue: ['Просрочено', 'Сколько задач ждёт'],
 };
 
+function widgetVisibilityToggle(value, onChange) {
+  return h('label', { class: 'widget-switch-control' },
+    h('input', {
+      type: 'checkbox',
+      class: 'widget-switch-input',
+      checked: !!value,
+      'aria-label': 'Показывать виджет',
+      onchange: (event) => onChange(event.target.checked),
+    }),
+    h('span', { class: 'widget-switch-track', 'aria-hidden': 'true' },
+      h('span', { class: 'widget-switch-thumb' })));
+}
+
 export function applyTheme() {
   const t = S.settings().theme || 'auto';
   document.documentElement.dataset.theme = t === 'auto' ? '' : t;
@@ -41,7 +54,7 @@ export function openWidgetsEditor() {
         }, ic('drag', 18));
         const controls = h('div', { class: 'w-edit' },
           handle,
-          toggle(w.on, (v) => {
+          widgetVisibilityToggle(w.on, (v) => {
             const next = S.settings().widgets.map((x) => (x.id === w.id ? { ...x, on: v } : x));
             S.setSettings({ widgets: next });
           }));
