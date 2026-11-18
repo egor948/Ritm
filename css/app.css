@@ -175,7 +175,7 @@ small { font-size: 12px; }
 .seg-btn.on { font-weight: 600; }
 .seg.small .seg-btn { font-size: 12.5px; padding: 6px 2px; }
 .priority-selector { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; width: 100%; padding: 2px; border-radius: 10px; background: var(--fill); }
-.priority-option { position: relative; min-width: 0; padding: 7px 4px; border-radius: 8px; font-size: 13.5px; font-weight: 500; text-align: center; color: var(--text); transition: background 0.2s, font-weight 0.2s, transform 0.2s; }
+.priority-option { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; min-width: 0; min-height: 38px; padding: 7px 4px; border-radius: 8px; font-size: 13.5px; font-weight: 500; text-align: center; color: var(--text); touch-action: manipulation; transition: background 0.2s, font-weight 0.2s, transform 0.2s; }
 .priority-option.on { background: var(--seg-thumb); font-weight: 650; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.10), 0 0 0 0.5px rgba(0, 0, 0, 0.04); }
 .priority-option:active { transform: scale(0.96); }
 .switch { -webkit-appearance: none; appearance: none; width: 51px; height: 31px; border-radius: 16px; background: var(--fill); position: relative; transition: background 0.3s; flex: none; margin: 0; border: 0; outline: 0; }
