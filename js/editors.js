@@ -406,17 +406,19 @@ function eventRemindersGroup(d) {
     const amount = numberInput(reminder.amount, (v) => { reminder.amount = v; }, { placeholder: '5', step: '1', width: '100%' });
     amount.min = '0';
     amount.max = '9999';
+    amount.setAttribute('aria-label', 'Количество');
+    unit.setAttribute('aria-label', 'Единица времени');
 
     const card = h('div', { class: 'reminder-card' },
       h('div', { class: 'reminder-card-head' },
-        h('div', { class: 'reminder-card-title' }, h('span', {}, 'Напоминание')),
+        h('div', { class: 'reminder-card-title' }, h('span', {}, 'Напомнить за')),
         h('button', { type: 'button', class: 'reminder-remove', 'aria-label': 'Удалить напоминание', onclick: () => {
           const index = d.reminders.findIndex((item) => item.id === reminder.id);
           if (index < 0) return;
           d.reminders.splice(index, 1);
           card.remove();
         } }, ic('x', 15))),
-      h('div', { class: 'reminder-fields reminder-relative-fields' }, unit, amount));
+      h('div', { class: 'reminder-fields reminder-relative-fields' }, amount, unit));
     return card;
   };
 
