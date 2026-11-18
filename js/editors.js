@@ -42,6 +42,36 @@ function editorShell({ title, draft, draw, onSave, onDelete, deleteLabel = 'Уд
   });
 }
 
+// Несколько независимых напоминаний с собственными датой и временем.
+function remindersGroup(d, redraw, defaultDate) {
+  if (!Array.isArray(d.reminders)) d.reminders = [];
+  const g = h('div', { class: 'group' });
+  d.reminders.forEach((reminder, i) => {
+    g.appendChild(h('div', { class: 'row' },
+      h('div', { class: 'row-label grow' },
+        h('div', { class: 'row-title' }, `Напоминание ${i + 1}`),
+        h('div', { class: 'row-controls' },
+          dateInput(reminder.date || defaultDate || todayStr(), (v) => { reminder.date = v; }),
+          timeInput(reminder.time || '09:00', (v) => { reminder.time = v; }))),
+      h('button', { type: 'button', class: 'mini-x vis', onclick: () => { d.reminders.splice(i, 1); redraw(); }, 'aria-label': 'Удалить напоминание' }, ic('x', 14))));
+  });
+  g.appendChild(h('button', { type: 'button', class: 'row-btn', onclick: () => { d.reminders.push({ id: uid(), date: defaultDate || todayStr(), time: '09:00' }); redraw(); } }, ic('plus', 18), ' Добавить напоминание'));
+  return g;
+}
+
+function legacyTaskReminders(task) {
+  if (Array.isArray(task.reminders)) return task.reminders.map((r) => ({ ...r }));
+  let date = task.date;
+  let time = task.remindAt || null;
+  if (!time && date && task.time && task.reminderMin != null) {
+    const at = new Date(`${date}T${task.time}:00`);
+    at.setMinutes(at.getMinutes() - Number(task.reminderMin || 0));
+    date = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+    time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+  }
+  return date && time ? [{ id: uid(), date, time }] : [];
+}
+
 // =====================================================================
 // Задача
 // =====================================================================
@@ -49,8 +79,8 @@ export function editTask(task, defaults = {}) {
   const data = S.data();
   const isNew = !task;
   const draft = task
-    ? { ...task, checklist: (task.checklist || []).map((c) => ({ ...c })) }
-    : { title: '', notes: '', goalId: null, date: null, time: null, duration: 30, done: false, priority: 0, weight: 1, reminderMin: null, remindAt: null, checklist: [], ...defaults };
+    ? { ...task, reminders: legacyTaskReminders(task), checklist: (task.checklist || []).map((c) => ({ ...c })) }
+    : { title: '', notes: '', goalId: null, date: null, time: null, duration: 30, done: false, priority: 0, weight: 1, reminderMin: null, remindAt: null, reminders: [], checklist: [], ...defaults };
   const goalMode = () => { const g = data.goals.find((x) => x.id === draft.goalId); if (!g) return null; const p = g.parentId && data.goals.find((x) => x.id === g.parentId); return (p && (p.progressMode === 'weight' || g.progressMode === 'weight')) || g.progressMode === 'weight' ? 'weight' : null; };
 
   return editorShell({
@@ -59,8 +89,9 @@ export function editTask(task, defaults = {}) {
     valid: (d) => (!d.title.trim() ? 'Введите название задачи' : null),
     onSave: (d) => {
       const out = { ...d, title: d.title.trim(), checklist: d.checklist.filter((c) => c.text.trim()) };
-      if (!out.date) { out.time = null; out.reminderMin = null; out.remindAt = null; }
-      if (out.time) out.remindAt = null; else out.reminderMin = null;
+      out.reminders = (out.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time }));
+      // Старые поля больше не используются после миграции в массив.
+      out.reminderMin = null; out.remindAt = null;
       S.upsert('tasks', out);
     },
     onDelete: isNew ? null : (api) => {
@@ -86,8 +117,9 @@ export function editTask(task, defaults = {}) {
           row('Дата', dateInput(d.date, (v) => { d.date = v; redraw(); }), { icon: 'calendar', iconColor: 'red' }),
           d.date ? row('Время', timeInput(d.time, (v) => { d.time = v; redraw(); }), { icon: 'clock', iconColor: 'blue' }) : null,
           d.date && d.time ? row('Длительность', selectInput(DURATIONS, d.duration || 30, (v) => (d.duration = v)), { icon: 'clock', iconColor: 'indigo' }) : null,
-          d.date && d.time ? row('Напомнить', selectInput(REMINDER_OPTIONS.map((o) => ({ v: o.v, label: o.label })), d.reminderMin, (v) => (d.reminderMin = v)), { icon: 'bell', iconColor: 'orange' }) : null,
-          d.date && !d.time ? row('Напомнить в', timeInput(d.remindAt, (v) => (d.remindAt = v)), { icon: 'bell', iconColor: 'orange' }) : null),
+          ),
+        groupTitle('Напоминания'),
+        remindersGroup(d, redraw, d.date || todayStr()),
         groupTitle('Приоритет'),
         group(h('div', { class: 'row' }, seg({ options: [{ v: 0, label: 'Нет' }, { v: 1, label: '!' }, { v: 2, label: '!!' }, { v: 3, label: '!!!' }], value: d.priority || 0, onChange: (v) => (d.priority = v) }))),
         groupTitle('Чек-лист'),
@@ -116,8 +148,8 @@ function checklistGroup(d, redraw) {
 // =====================================================================
 export function editEvent(ev, defaults = {}, occDate = null) {
   const isNew = !ev;
-  const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: 'blue', location: '', notes: '', reminderMin: null, repeat: { freq: 'none', interval: 1, days: [], until: null } };
-  const draft = ev ? { ...base, ...ev, repeat: { ...base.repeat, ...(ev.repeat || {}) } } : { ...base, ...defaults };
+  const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: 'blue', location: '', notes: '', reminderMin: null, reminders: [], repeat: { freq: 'none', interval: 1, days: [], until: null } };
+  const draft = ev ? { ...base, ...ev, reminders: (ev.reminders || []).map((r) => ({ ...r })), repeat: { ...base.repeat, ...(ev.repeat || {}) } } : { ...base, ...defaults, reminders: (defaults.reminders || []).map((r) => ({ ...r })) };
   const data = S.data();
   const tmpl = data.events;
   void tmpl;
@@ -126,7 +158,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
     draft,
     valid: (d) => (!d.title.trim() ? 'Введите название события' : !d.allDay && d.end && d.start && toMin(d.end) <= toMin(d.start) ? 'Время окончания должно быть позже начала' : null),
     onSave: (d) => {
-      const out = { ...d, title: d.title.trim() };
+      const out = { ...d, title: d.title.trim(), reminders: (d.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time })) };
       if (out.allDay) { out.start = null; out.end = null; if (out.endDate && out.endDate <= out.date) out.endDate = null; } else out.endDate = null;
       if (out.repeat.freq === 'none') out.repeat = { freq: 'none' };
       else if (out.repeat.freq !== 'weekly') out.repeat = { freq: out.repeat.freq, interval: out.repeat.interval || 1, until: out.repeat.until || null };
@@ -165,7 +197,9 @@ export function editEvent(ev, defaults = {}, occDate = null) {
           r.freq === 'weekly' ? h('div', { class: 'row' }, pills({ multi: true, options: WEEK_ORDER.map((n) => ({ v: n, label: WD_SHORT[n] })), value: r.days && r.days.length ? r.days : [new Date(d.date + 'T00:00').getDay()], onChange: (v) => (r.days = v) })) : null,
           r.freq && r.freq !== 'none' ? row('Каждые', stepper(r.interval || 1, (v) => (r.interval = v), { min: 1, max: 30, format: (v) => `${v} ${r.freq === 'daily' ? plural(v, ['день', 'дня', 'дней']) : r.freq === 'weekly' ? plural(v, ['неделю', 'недели', 'недель']) : r.freq === 'monthly' ? plural(v, ['месяц', 'месяца', 'месяцев']) : plural(v, ['год', 'года', 'лет'])}` })) : null,
           r.freq && r.freq !== 'none' ? row('Повторять до', dateInput(r.until, (v) => (r.until = v))) : null,
-          row('Напомнить', selectInput(REMINDER_OPTIONS.map((o) => ({ v: o.v, label: d.allDay && o.v != null ? (o.v === 0 ? 'В 9:00 в этот день' : o.label) : o.label })).filter((o) => !d.allDay || o.v === null || o.v === 0), d.reminderMin, (v) => (d.reminderMin = v)), { icon: 'bell', iconColor: 'orange' })),
+          row('Старое напоминание перед началом', selectInput(REMINDER_OPTIONS.map((o) => ({ v: o.v, label: d.allDay && o.v != null ? (o.v === 0 ? 'В 9:00 в этот день' : o.label) : o.label })).filter((o) => !d.allDay || o.v === null || o.v === 0), d.reminderMin, (v) => (d.reminderMin = v)), { icon: 'bell', iconColor: 'orange' })),
+        groupTitle('Дополнительные напоминания'),
+        remindersGroup(d, redraw, d.date),
         groupTitle('Цвет'),
         group(h('div', { class: 'row' }, colorPicker(d.color, (v) => (d.color = v)))),
         group(h('div', { class: 'row solo' }, textInput({ value: d.notes, placeholder: 'Заметки', multiline: true, onInput: (v) => (d.notes = v) }))),
