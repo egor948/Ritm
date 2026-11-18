@@ -5,7 +5,7 @@ import {
   MONTHS, MONTHS_NOM, WD_SHORT, WD_LONG, fmtDayMonth, fmtLong, plural, range, clear, clamp, relativeDay,
 } from './util.js';
 import * as S from './store.js';
-import { dayItems, layoutColumns, expandEvents, dayScore } from './logic.js';
+import { dayItems, layoutColumns, expandEvents, dayScore, isDateNotPast } from './logic.js';
 import { ic, cv, seg, openSheet, group, row, toggle, toast, dateInput, checkbox } from './ui.js';
 import { screen, navBtn } from './shell.js';
 import { editEvent, editTask, quickAdd } from './editors.js';
@@ -143,6 +143,7 @@ function attachResize(handle, block, spec) {
 
 // ---------------------------------------------------------------- перенос и изменение элементов
 function moveItem(it, date, startMin) {
+  if (!isDateNotPast(date)) { toast('Нельзя перенести задачу или мероприятие на прошедшую дату'); return; }
   if (it.type === 'task') {
     S.upsert('tasks', { id: it.id, date, time: fromMin(startMin), duration: null });
     toast(`Задача запланирована на ${fromMin(startMin)}`);
