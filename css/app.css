@@ -885,3 +885,33 @@ small { font-size: 12px; }
   #tabbar { box-sizing: border-box; }
   .sidebar-brand { display: flex; }
 }
+
+
+/* Годовой календарь на ПК: компактная ширина и квадратные ячейки дней. */
+@media (min-width: 800px) and (hover: hover) and (pointer: fine) {
+  #view[data-tab="calendar"] .cal-year .year-grid {
+    width: min(100%, 1080px);
+    margin: 0 auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 26px 28px;
+    padding: 18px 28px 24px;
+  }
+  #view[data-tab="calendar"] .cal-year .ym-grid {
+    gap: 3px;
+    grid-auto-rows: 1fr;
+  }
+  #view[data-tab="calendar"] .cal-year .ym-day,
+  #view[data-tab="calendar"] .cal-year .ym-blank {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    min-width: 0;
+    aspect-ratio: 1 / 1;
+    box-sizing: border-box;
+    line-height: 1;
+    font-size: 12px;
+  }
+  #view[data-tab="calendar"] .cal-year .ym > b {
+    font-size: 15px;
+  }
+}
