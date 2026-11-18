@@ -398,6 +398,15 @@ export function resetAll() {
     }
   }
   state.timers = {};
+  const baseCalendar = state.calendars.find((calendar) => calendar.id === DEFAULT_CALENDAR_ID);
+  if (baseCalendar) {
+    Object.assign(baseCalendar, { name: 'Личный календарь', color: 'blue', visible: true, isDefault: true, deleted: false, updatedAt: now });
+    state.dirty[`calendars:${DEFAULT_CALENDAR_ID}`] = 1;
+  }
+  if (state.settings.calFilters?.calendarId) {
+    state.settings = { ...state.settings, calFilters: { ...state.settings.calFilters, calendarId: null }, updatedAt: now };
+    state.dirty['settings:main'] = 1;
+  }
   commit();
 }
 export function replaceAllWith(newState) {
