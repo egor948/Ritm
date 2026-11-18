@@ -31,7 +31,7 @@ function widgetVisibilityToggle(value, onChange) {
 }
 
 export function applyTheme() {
-  const t = S.settings().theme || 'auto';
+  const t = S.localTheme();
   document.documentElement.dataset.theme = t === 'auto' ? '' : t;
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
   const meta = document.querySelector('meta[name="theme-color"]');
@@ -310,7 +310,7 @@ export function openSettings() {
         api.body.append(
           groupTitle('Оформление'),
           group(
-            h('div', { class: 'row' }, seg({ options: [{ v: 'auto', label: 'Авто' }, { v: 'light', label: 'Светлая' }, { v: 'dark', label: 'Тёмная' }], value: st.theme || 'auto', onChange: (v) => { S.setSettings({ theme: v }); applyTheme(); } })),
+            h('div', { class: 'row' }, seg({ options: [{ v: 'auto', label: 'Авто' }, { v: 'light', label: 'Светлая' }, { v: 'dark', label: 'Тёмная' }], value: S.localTheme(), onChange: (v) => { S.setLocalTheme(v); applyTheme(); } })),
             row('Неделя начинается с', selectInput([{ v: 1, label: 'Понедельника' }, { v: 0, label: 'Воскресенья' }], st.weekStart, (v) => S.setSettings({ weekStart: Number(v) })), { icon: 'calendar', iconColor: 'red' })),
           groupTitle('Синхронизация между устройствами'),
           group(
