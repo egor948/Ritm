@@ -133,6 +133,10 @@ export function editTask(task, defaults = {}) {
     },
     draw(body, d, redraw) {
       const titleInp = textInput({ value: d.title, placeholder: 'Что нужно сделать?', big: true, onInput: (v) => (d.title = v), autofocus: isNew });
+      const taskTimeRow = row('Время', timeInput(d.time, (v) => { d.time = v; taskDurationRow.style.display = d.date && d.time ? '' : 'none'; }), { icon: 'clock', iconColor: 'blue' });
+      const taskDurationRow = row('Длительность', selectInput(DURATIONS, d.duration || 30, (v) => (d.duration = v)), { icon: 'clock', iconColor: 'indigo' });
+      taskTimeRow.style.display = d.date ? '' : 'none';
+      taskDurationRow.style.display = d.date && d.time ? '' : 'none';
       body.append(
         group(h('div', { class: 'row solo' }, titleInp)),
         group(h('div', { class: 'row solo' }, textInput({ value: d.notes, placeholder: 'Заметки', multiline: true, onInput: (v) => (d.notes = v) }))),
@@ -146,9 +150,9 @@ export function editTask(task, defaults = {}) {
             value: d.date === todayStr() ? 'today' : d.date === addDays(todayStr(), 1) ? 'tomorrow' : d.date === addDays(todayStr(), 7) ? 'week' : !d.date ? 'none' : null,
             onChange: (v) => { d.date = v === 'today' ? todayStr() : v === 'tomorrow' ? addDays(todayStr(), 1) : v === 'week' ? addDays(todayStr(), 7) : null; redraw(); },
           })),
-          row('Дата', dateInput(d.date, (v) => { d.date = v; redraw(); }), { icon: 'calendar', iconColor: 'red' }),
-          d.date ? row('Время', timeInput(d.time, (v) => { d.time = v; redraw(); }), { icon: 'clock', iconColor: 'blue' }) : null,
-          d.date && d.time ? row('Длительность', selectInput(DURATIONS, d.duration || 30, (v) => (d.duration = v)), { icon: 'clock', iconColor: 'indigo' }) : null,
+          row('Дата', dateInput(d.date, (v) => { d.date = v; taskTimeRow.style.display = d.date ? '' : 'none'; taskDurationRow.style.display = d.date && d.time ? '' : 'none'; }), { icon: 'calendar', iconColor: 'red' }),
+          taskTimeRow,
+          taskDurationRow,
           ),
         groupTitle('Напоминания'),
         remindersGroup(d, redraw, d.date || todayStr()),
@@ -260,15 +264,16 @@ export function editEvent(ev, defaults = {}, occDate = null) {
     },
     draw(body, d, redraw) {
       const r = d.repeat;
+      const endTimeControl = timeInput(d.end, (v) => (d.end = v), { clearable: false });
       body.append(
         group(h('div', { class: 'row solo' }, textInput({ value: d.title, placeholder: 'Название', big: true, onInput: (v) => (d.title = v), autofocus: isNew })),
           h('div', { class: 'row solo' }, textInput({ value: d.location, placeholder: 'Место', onInput: (v) => (d.location = v) }))),
         group(
           row('Весь день', toggle(d.allDay, (v) => { d.allDay = v; redraw(); }), { icon: 'sun', iconColor: 'orange' }),
-          row(d.allDay ? 'Начало' : 'Дата', dateInput(d.date, (v) => { d.date = v || todayStr(); redraw(); }, { clearable: false }), { icon: 'calendar', iconColor: 'red' }),
+          row(d.allDay ? 'Начало' : 'Дата', dateInput(d.date, (v) => { d.date = v || todayStr(); }, { clearable: false }), { icon: 'calendar', iconColor: 'red' }),
           d.allDay ? row('Конец', dateInput(d.endDate, (v) => (d.endDate = v))) : null,
-          !d.allDay ? row('Начало', timeInput(d.start, (v) => { d.start = v; if (v && (!d.end || toMin(d.end) <= toMin(v))) { d.end = fromMin(Math.min(1439, toMin(v) + 60)); } redraw(); }, { clearable: false }), { icon: 'clock', iconColor: 'blue' }) : null,
-          !d.allDay ? row('Конец', timeInput(d.end, (v) => (d.end = v), { clearable: false })) : null),
+          !d.allDay ? row('Начало', timeInput(d.start, (v) => { d.start = v; if (v && (!d.end || toMin(d.end) <= toMin(v))) { d.end = fromMin(Math.min(1439, toMin(v) + 60)); endTimeControl.querySelector('input').value = d.end; } }, { clearable: false }), { icon: 'clock', iconColor: 'blue' }) : null,
+          !d.allDay ? row('Конец', endTimeControl) : null),
         groupTitle('Повтор и напоминание'),
         group(
           row('Повтор', selectInput(Object.entries(REPEAT_LABELS).map(([v, label]) => ({ v, label })), r.freq || 'none', (v) => { r.freq = v; if (v === 'weekly' && (!r.days || !r.days.length)) r.days = []; redraw(); }), { icon: 'repeat', iconColor: 'green' }),
@@ -326,7 +331,7 @@ export function editHabit(habit, defaults = {}) {
           s.type === 'weekly' ? row('Раз в неделю', stepper(s.perWeek || 3, (v) => (s.perWeek = v), { min: 1, max: 7 })) : null),
         groupTitle('Напоминание и цель'),
         group(
-          row('Время', timeInput(d.time, (v) => { d.time = v; redraw(); }), { icon: 'clock', iconColor: 'blue' }),
+          row('Время', timeInput(d.time, (v) => { d.time = v; }), { icon: 'clock', iconColor: 'blue' }),
           d.time ? row('Напоминать', toggle(d.remind, (v) => (d.remind = v)), { icon: 'bell', iconColor: 'orange' }) : null,
           row('Цель', selectInput(goalOptions(data), d.goalId, (v) => (d.goalId = v)), { icon: 'target', iconColor: 'green' })),
         groupNote('Привычку можно связать с целью — она появится на странице цели и учтётся в общей картине.'),
