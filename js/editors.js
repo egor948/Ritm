@@ -474,6 +474,11 @@ export function editEvent(ev, defaults = {}, occDate = null) {
     },
     draw(body, d, redraw) {
       const r = d.repeat;
+      const eventCalendarControl = selectInput(calendarOptions(S.data().calendars), d.calendarId || DEFAULT_CALENDAR_ID, (v) => {
+        d.calendarId = v;
+        const selected = S.data().calendars.find((calendar) => calendar.id === v);
+        if (selected && selected.color) d.color = selected.color;
+      });
       const endTimeControl = timeInput(d.end, (v) => (d.end = v), { clearable: false });
       const eventDateControl = dateInput(d.date, (v) => {
         const nextDate = v || todayStr();
@@ -495,7 +500,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
           !d.allDay ? row('Начало', timeInput(d.start, (v) => { d.start = v; if (v && (!d.end || toMin(d.end) <= toMin(v))) { d.end = fromMin(Math.min(1439, toMin(v) + 60)); endTimeControl.querySelector('input').value = d.end; } }, { clearable: false }), { icon: 'clock', iconColor: 'blue' }) : null,
           !d.allDay ? row('Конец', endTimeControl) : null),
         groupTitle('Календарь'),
-        group(row('Календарь', selectInput(calendarOptions(S.data().calendars), d.calendarId || DEFAULT_CALENDAR_ID, (v) => { d.calendarId = v; }), { icon: 'calendar', iconColor: 'red' })),
+        group(row('Календарь', eventCalendarControl, { icon: 'calendar', iconColor: 'red' })),
         groupTitle('Повтор'),
         group(
           row('Повтор', selectInput(Object.entries(REPEAT_LABELS).map(([v, label]) => ({ v, label })), r.freq || 'none', (v) => { r.freq = v; if (v === 'weekly' && (!r.days || !r.days.length)) r.days = []; redraw(); }), { icon: 'repeat', iconColor: 'green' }),
