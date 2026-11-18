@@ -45,18 +45,33 @@ function editorShell({ title, draft, draw, onSave, onDelete, deleteLabel = 'Уд
 // Несколько независимых напоминаний с собственными датой и временем.
 function remindersGroup(d, redraw, defaultDate) {
   if (!Array.isArray(d.reminders)) d.reminders = [];
-  const g = h('div', { class: 'group' });
+  const list = h('div', { class: 'reminder-list' });
   d.reminders.forEach((reminder, i) => {
-    g.appendChild(h('div', { class: 'row' },
-      h('div', { class: 'row-label grow' },
-        h('div', { class: 'row-title' }, `Напоминание ${i + 1}`),
-        h('div', { class: 'row-controls' },
-          dateInput(reminder.date || defaultDate || todayStr(), (v) => { reminder.date = v; }),
-          timeInput(reminder.time || '09:00', (v) => { reminder.time = v; }))),
-      h('button', { type: 'button', class: 'mini-x vis', onclick: () => { d.reminders.splice(i, 1); redraw(); }, 'aria-label': 'Удалить напоминание' }, ic('x', 14))));
+    // Дата и время обязательны: пустое значение сразу восстанавливается.
+    reminder.date = reminder.date || defaultDate || todayStr();
+    reminder.time = reminder.time || '09:00';
+    const date = dateInput(reminder.date, (v) => {
+      if (v) reminder.date = v;
+      else redraw();
+    }, { clearable: false });
+    const time = timeInput(reminder.time, (v) => {
+      if (v) reminder.time = v;
+      else redraw();
+    }, { clearable: false });
+    list.appendChild(h('div', { class: 'reminder-card' },
+      h('div', { class: 'reminder-card-head' },
+        h('div', { class: 'reminder-card-title' }, ic('bell', 16), h('span', {}, `Напоминание ${i + 1}`)),
+        h('button', { type: 'button', class: 'reminder-remove', onclick: () => { d.reminders.splice(i, 1); redraw(); }, 'aria-label': 'Удалить напоминание' }, ic('x', 15))),
+      h('div', { class: 'reminder-fields' },
+        h('label', { class: 'reminder-field' }, h('span', {}, 'Дата'), date),
+        h('label', { class: 'reminder-field' }, h('span', {}, 'Время'), time))));
   });
-  g.appendChild(h('button', { type: 'button', class: 'row-btn', onclick: () => { d.reminders.push({ id: uid(), date: defaultDate || todayStr(), time: '09:00' }); redraw(); } }, ic('plus', 18), ' Добавить напоминание'));
-  return g;
+  list.appendChild(h('button', {
+    type: 'button',
+    class: 'reminder-add',
+    onclick: () => { d.reminders.push({ id: uid(), date: defaultDate || todayStr(), time: '09:00' }); redraw(); },
+  }, ic('plus', 17), 'Добавить напоминание'));
+  return list;
 }
 
 function legacyTaskReminders(task) {
