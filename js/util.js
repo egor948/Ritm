@@ -191,14 +191,13 @@ export const clear = (el) => {
 export function captureScrollPosition(scroller) {
   if (!scroller) return null;
   const viewport = scroller.getBoundingClientRect();
-  let anchor = null;
+  const anchors = [];
   for (const el of scroller.querySelectorAll('[data-scroll-anchor]')) {
     const rect = el.getBoundingClientRect();
     if (rect.bottom <= viewport.top + 1 || rect.top >= viewport.bottom) continue;
-    anchor = { key: el.getAttribute('data-scroll-anchor'), offset: rect.top - viewport.top };
-    break;
+    anchors.push({ key: el.getAttribute('data-scroll-anchor'), offset: rect.top - viewport.top });
   }
-  return { top: scroller.scrollTop, anchor };
+  return { top: scroller.scrollTop, anchors };
 }
 
 export function restoreScrollPosition(scroller, saved) {
@@ -208,7 +207,7 @@ export function restoreScrollPosition(scroller, saved) {
     for (const anchor of saved.anchors || (saved.anchor ? [saved.anchor] : [])) {
       const el = [...scroller.querySelectorAll('[data-scroll-anchor]')]
         .find((node) => node.getAttribute('data-scroll-anchor') === anchor.key);
-      if (!el) continue; // якорь мог быть удалён — берём следующий видимый элемент
+      if (!el) continue; // Удалённый якорь заменяем следующим видимым элементом
       const viewport = scroller.getBoundingClientRect();
       const rect = el.getBoundingClientRect();
       scroller.scrollTop += rect.top - viewport.top - anchor.offset;
