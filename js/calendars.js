@@ -3,7 +3,7 @@ import { h, uid, clear, COLOR_KEYS, plural } from './util.js';
 import * as S from './store.js';
 import { openSheet, actionSheet, group, groupTitle, groupNote, row, toggle, textInput, colorPicker, toast, ic, cv } from './ui.js';
 
-export const DEFAULT_CALENDAR_ID = 'calendar-default';
+export const DEFAULT_CALENDAR_ID = S.DEFAULT_CALENDAR_ID;
 
 export function eventCalendarId(event) {
   return event && event.calendarId || DEFAULT_CALENDAR_ID;
@@ -92,7 +92,7 @@ function openCalendarEditor(calendar, onSaved) {
                     }
                     sheet.close(true);
                     onSaved && onSaved();
-                    toast('Календарь удалён', { label: 'Отменить', onClick: () => S.undo(inverse) });
+                    toast('Календарь удалён', { label: 'Отменить', onClick: () => { S.undo(inverse); onSaved && onSaved(); } });
                   },
                 }],
               });
