@@ -262,6 +262,15 @@ test('слияние: побеждает более свежая запись', 
   assert.equal(L.pickNewer(null, { updatedAt: 1 }).updatedAt, 1);
 });
 
+test('нельзя назначить независимое напоминание на прошедшую дату или время', () => {
+  const now = new Date(2026, 10, 18, 10, 0, 30);
+  assert.equal(L.isReminderInFuture({ date: '2026-11-17', time: '12:00' }, now), false);
+  assert.equal(L.isReminderInFuture({ date: '2026-11-18', time: '10:00' }, now), false);
+  assert.equal(L.isReminderInFuture({ date: '2026-11-18', time: '10:01' }, now), true);
+  assert.equal(L.isReminderInFuture({ date: '2026-11-19', time: '00:01' }, now), true);
+  assert.equal(L.isReminderInFuture({ date: '2026-11-18', time: '' }, now), false);
+});
+
 test('несколько независимых напоминаний задачи и события с собственными датами и временем', () => {
   const now = new Date(2026, 10, 15, 12, 0, 0);
   const data = {
