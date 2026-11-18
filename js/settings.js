@@ -30,6 +30,43 @@ function widgetVisibilityToggle(value, onChange) {
       h('span', { class: 'widget-switch-thumb' })));
 }
 
+function themeSelector(value, onChange) {
+  const options = [
+    { value: 'auto', label: 'Авто' },
+    { value: 'light', label: 'Светлая' },
+    { value: 'dark', label: 'Тёмная' },
+  ];
+  let selected = options.some((option) => option.value === value) ? value : 'auto';
+  const control = h('div', {
+    class: 'seg theme-selector',
+    role: 'group',
+    'aria-label': 'Тема оформления',
+    style: { '--n': 3, '--i': options.findIndex((option) => option.value === selected) },
+  });
+  const thumb = h('div', { class: 'seg-thumb', 'aria-hidden': 'true' });
+  const buttons = options.map((option, index) => h('button', {
+    type: 'button',
+    class: 'seg-btn theme-selector-option' + (option.value === selected ? ' on' : ''),
+    'aria-pressed': option.value === selected ? 'true' : 'false',
+    'data-theme-option': option.value,
+    onclick: (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (selected === option.value) return;
+      selected = option.value;
+      control.style.setProperty('--i', index);
+      buttons.forEach((button, buttonIndex) => {
+        const active = buttonIndex === index;
+        button.classList.toggle('on', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      onChange(selected);
+    },
+  }, option.label));
+  control.append(thumb, ...buttons);
+  return control;
+}
+
 export function applyTheme() {
   const t = S.localTheme();
   document.documentElement.dataset.theme = t === 'auto' ? '' : t;
@@ -310,7 +347,7 @@ export function openSettings() {
         api.body.append(
           groupTitle('Оформление'),
           group(
-            h('div', { class: 'row' }, seg({ options: [{ v: 'auto', label: 'Авто' }, { v: 'light', label: 'Светлая' }, { v: 'dark', label: 'Тёмная' }], value: S.localTheme(), onChange: (v) => { S.setLocalTheme(v); applyTheme(); } })),
+            h('div', { class: 'row theme-selector-row' }, themeSelector(S.localTheme(), (v) => { S.setLocalTheme(v); applyTheme(); })),
             row('Неделя начинается с', selectInput([{ v: 1, label: 'Понедельника' }, { v: 0, label: 'Воскресенья' }], st.weekStart, (v) => S.setSettings({ weekStart: Number(v) })), { icon: 'calendar', iconColor: 'red' })),
           groupTitle('Синхронизация между устройствами'),
           group(
