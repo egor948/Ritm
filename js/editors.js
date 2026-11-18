@@ -48,6 +48,13 @@ function remindersGroup(d, redraw, defaultDate) {
   const list = h('div', { class: 'reminder-list' });
   let addButton;
 
+  const updateLabels = () => {
+    [...list.querySelectorAll('.reminder-card')].forEach((card, index) => {
+      const label = card.querySelector('.reminder-card-heading span');
+      if (label) label.textContent = `Напоминание ${index + 1}`;
+    });
+  };
+
   const makeCard = (reminder) => {
     reminder.id = reminder.id || uid();
     reminder.date = reminder.date || defaultDate || todayStr();
@@ -64,12 +71,13 @@ function remindersGroup(d, redraw, defaultDate) {
 
     const card = h('div', { class: 'reminder-card', 'data-scroll-anchor': `reminder:${reminder.id}` },
       h('div', { class: 'reminder-card-head' },
-        h('div', { class: 'reminder-card-title' }, ic('bell', 16), h('span', {}, 'Напоминание')),
+        h('div', { class: 'reminder-card-heading' }, ic('bell', 16), h('span', {}, '')),
         h('button', { type: 'button', class: 'reminder-remove', 'aria-label': 'Удалить напоминание', onclick: () => {
           const index = d.reminders.findIndex((item) => item.id === reminder.id);
           if (index < 0) return;
           d.reminders.splice(index, 1);
           card.remove();
+          updateLabels();
         } }, ic('x', 15))),
       h('div', { class: 'reminder-fields' },
         h('label', { class: 'reminder-field' }, h('span', {}, 'Дата'), date),
@@ -78,6 +86,7 @@ function remindersGroup(d, redraw, defaultDate) {
   };
 
   d.reminders.forEach((reminder) => list.appendChild(makeCard(reminder)));
+  updateLabels();
   addButton = h('button', {
     type: 'button',
     class: 'reminder-add',
