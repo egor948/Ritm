@@ -8,7 +8,36 @@ const THEMES = ['auto', 'light', 'dark'];
 let deviceTheme = null;
 let storageKey = KEY;
 const accountKey = (userId) => userId ? `${KEY}.account.${userId}` : KEY;
-export const KINDS = ['goals', 'tasks', 'events', 'habits', 'logs'];
+export const DEFAULT_CALENDAR_ID = 'calendar-default';
+export const KINDS = ['goals', 'tasks', 'events', 'habits', 'logs', 'calendars'];
+
+function ensureCalendarState(s) {
+  if (!Array.isArray(s.calendars)) s.calendars = [];
+  if (!s.dirty) s.dirty = {};
+  const now = Date.now();
+  let base = s.calendars.find((calendar) => calendar.id === DEFAULT_CALENDAR_ID);
+  if (!base) {
+    base = { id: DEFAULT_CALENDAR_ID, name: 'Личный календарь', color: 'blue', isDefault: true, visible: true, createdAt: now, updatedAt: now };
+    s.calendars.push(base);
+    s.dirty[`calendars:${DEFAULT_CALENDAR_ID}`] = 1;
+  } else if (base.deleted) {
+    base.deleted = false;
+    base.updatedAt = now;
+    s.dirty[`calendars:${DEFAULT_CALENDAR_ID}`] = 1;
+  } else {
+    base.isDefault = true;
+    if (!base.name) base.name = 'Личный календарь';
+    if (!base.color) base.color = 'blue';
+    if (base.visible == null) base.visible = true;
+  }
+  for (const event of s.events || []) {
+    if (!event.deleted && !event.calendarId) {
+      event.calendarId = DEFAULT_CALENDAR_ID;
+      event.updatedAt = Math.max(event.updatedAt || 0, now);
+      s.dirty[`events:${event.id}`] = 1;
+    }
+  }
+}
 
 export const DEFAULT_WIDGETS = [
   { id: 'day', on: true },
@@ -36,7 +65,7 @@ const defaultSettings = () => ({
 
 const emptyState = () => ({
   v: 1,
-  goals: [], tasks: [], events: [], habits: [], logs: [],
+  goals: [], tasks: [], events: [], habits: [], logs: [], calendars: [],
   settings: defaultSettings(),
   dirty: {}, // 'kind:id' → 1, ожидают отправки на сервер
   sync: { cursor: null, lastSyncAt: 0 },
@@ -53,12 +82,15 @@ function load(key = storageKey) {
       // новые виджеты, появившиеся после обновления, добавляем в конец
       const have = new Set(merged.settings.widgets.map((w) => w.id));
       for (const w of DEFAULT_WIDGETS) if (!have.has(w.id)) merged.settings.widgets.push({ ...w });
+      ensureCalendarState(merged);
       return merged;
     }
   } catch (e) {
     console.warn('Не удалось прочитать данные', e);
   }
-  return emptyState();
+  const fresh = emptyState();
+  ensureCalendarState(fresh);
+  return fresh;
 }
 
 let state = load();
@@ -114,6 +146,7 @@ export function data() {
     events: live(state.events),
     habits: live(state.habits),
     logs: live(state.logs),
+    calendars: live(state.calendars),
     settings: state.settings,
   };
   snap.idx = buildLogIndex(snap.logs);
@@ -325,15 +358,19 @@ export function applyRemote(rows) {
 
 // ---------- Экспорт / импорт ----------
 export function exportJSON() {
-  const { goals, tasks, events, habits, logs } = state;
-  return JSON.stringify({ app: 'rhythm', version: 1, exportedAt: new Date().toISOString(), goals, tasks, events, habits, logs, settings: syncableSettings() }, null, 2);
+  const { goals, tasks, events, habits, logs, calendars } = state;
+  return JSON.stringify({ app: 'rhythm', version: 1, exportedAt: new Date().toISOString(), goals, tasks, events, habits, logs, calendars, settings: syncableSettings() }, null, 2);
 }
 export function importJSON(text, { replace = true } = {}) {
   const obj = JSON.parse(text);
   if (obj.app !== 'rhythm') throw new Error('Это не резервная копия «Ритма»');
   if (replace) {
-    // помечаем существующие как удалённые, чтобы синхронизация сняла их и на других устройствах
-    for (const k of KINDS) for (const r of state[k]) if (!r.deleted) { r.deleted = true; r.updatedAt = Date.now(); state.dirty[`${k}:${r.id}`] = 1; }
+    // Существующие данные помечаем удалёнными; базовый календарь сохраняем для старых резервных копий.
+    for (const k of KINDS) for (const r of state[k]) {
+      if (!r.deleted && !(k === 'calendars' && r.id === DEFAULT_CALENDAR_ID)) {
+        r.deleted = true; r.updatedAt = Date.now(); state.dirty[`${k}:${r.id}`] = 1;
+      }
+    }
   }
   const now = Date.now();
   for (const k of KINDS) {
@@ -345,12 +382,17 @@ export function importJSON(text, { replace = true } = {}) {
     }
   }
   if (obj.settings) setSettings({ ...obj.settings });
+  ensureCalendarState(state);
   commit();
 }
 /** Стереть все данные. Записи помечаются удалёнными, чтобы очистка дошла и до других устройств. */
 export function resetAll() {
   const now = Date.now();
-  for (const k of KINDS) for (const r of state[k]) if (!r.deleted) { r.deleted = true; r.updatedAt = now; state.dirty[`${k}:${r.id}`] = 1; }
+  for (const k of KINDS) for (const r of state[k]) {
+    if (!r.deleted && !(k === 'calendars' && r.id === DEFAULT_CALENDAR_ID)) {
+      r.deleted = true; r.updatedAt = now; state.dirty[`${k}:${r.id}`] = 1;
+    }
+  }
   state.timers = {};
   commit();
 }
@@ -359,6 +401,7 @@ export function replaceAllWith(newState) {
   const nextSettings = { ...defaultSettings(), ...(newState.settings || {}) };
   delete nextSettings.theme;
   state = { ...emptyState(), ...newState, settings: nextSettings };
+  ensureCalendarState(state);
   commit();
 }
 
