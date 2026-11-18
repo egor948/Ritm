@@ -441,7 +441,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
   const isNew = !ev;
   const defaultCalendarId = S.settings().calFilters?.calendarId || DEFAULT_CALENDAR_ID;
   const defaultCalendar = S.data().calendars.find((calendar) => calendar.id === defaultCalendarId);
-  const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: defaultCalendar?.color || 'blue', calendarId: defaultCalendarId, location: '', notes: '', reminderMin: null, reminders: [], repeat: { freq: 'none', interval: 1, days: [], until: null } };
+  const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: defaultCalendar?.color || 'blue', colorOverride: false, calendarId: defaultCalendarId, location: '', notes: '', reminderMin: null, reminders: [], repeat: { freq: 'none', interval: 1, days: [], until: null } };
   const source = ev || defaults;
   const draft = ev ? { ...base, ...ev, reminders: eventReminderDraft(source), repeat: { ...base.repeat, ...(ev.repeat || {}) } } : { ...base, ...defaults, reminders: eventReminderDraft(source) };
   const originalDate = ev ? (ev.date || null) : null;
@@ -479,6 +479,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
       const eventCalendarControl = selectInput(calendarOptions(S.data().calendars), d.calendarId || DEFAULT_CALENDAR_ID, (v) => {
         d.calendarId = v;
         const selected = S.data().calendars.find((calendar) => calendar.id === v);
+        d.colorOverride = false;
         if (selected && selected.color) d.color = selected.color;
         redraw();
       });
@@ -515,7 +516,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
         eventRemindersGroup(d),
         groupNote('Напоминания рассчитываются относительно начала мероприятия. Для событий на весь день точка отсчёта — 09:00.'),
         groupTitle('Цвет'),
-        group(h('div', { class: 'row' }, colorPicker(d.color, (v) => (d.color = v)))),
+        group(h('div', { class: 'row' }, colorPicker(d.color, (v) => { d.color = v; d.colorOverride = true; }))),
         group(h('div', { class: 'row solo' }, textInput({ value: d.notes, placeholder: 'Заметки', multiline: true, onInput: (v) => (d.notes = v) }))),
       );
     },
