@@ -205,7 +205,6 @@ export function openSheet({ title = '', left, right, build, onClose, tall = fals
     restoreBodyPosition(pointerScrollTop);
   };
 
-  let closed = false;
   const api = {
     body, sheet,
     setTitle: (t) => { titleEl.textContent = t; },
