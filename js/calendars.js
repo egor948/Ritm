@@ -1,5 +1,5 @@
 // Пользовательские календари: управление, видимость и выбор календаря для события.
-import { h, uid, clear, COLOR_KEYS } from './util.js';
+import { h, uid, clear, COLOR_KEYS, plural } from './util.js';
 import * as S from './store.js';
 import { openSheet, actionSheet, group, groupTitle, groupNote, row, toggle, textInput, colorPicker, toast, ic, cv } from './ui.js';
 
@@ -18,18 +18,19 @@ export function calendarOptions(calendars = S.data().calendars) {
 }
 
 /** Скрытие календаря действует в приложении целиком; выбранный фильтр применяется только к экрану календаря. */
+export function filterCalendarEvents(events, calendars = [], selectedId = null) {
+  const byId = new Map(calendars.map((calendar) => [calendar.id, calendar]));
+  return events.filter((event) => {
+    const id = eventCalendarId(event);
+    const calendar = byId.get(id);
+    if (calendar && calendar.visible === false) return false;
+    return !selectedId || id === selectedId;
+  });
+}
+
 export function visibleEventsData(data, { selected = false } = {}) {
-  const calendars = new Map((data.calendars || []).map((calendar) => [calendar.id, calendar]));
   const selectedId = selected && S.settings().calFilters && S.settings().calFilters.calendarId;
-  return {
-    ...data,
-    events: data.events.filter((event) => {
-      const id = eventCalendarId(event);
-      const calendar = calendars.get(id);
-      if (calendar && calendar.visible === false) return false;
-      return !selectedId || id === selectedId;
-    }),
-  };
+  return { ...data, events: filterCalendarEvents(data.events, data.calendars || [], selectedId) };
 }
 
 function openCalendarEditor(calendar, onSaved) {
@@ -122,7 +123,7 @@ export function openCalendarManager(onFilters) {
           h('i', { class: 'calendar-color-dot', style: { '--c': cv(calendar.color || 'blue') } }),
           h('span', { class: 'calendar-manage-copy' },
             h('b', null, calendar.name || 'Без названия'),
-            h('small', null, `${count} ${count === 1 ? 'событие' : count >= 2 && count <= 4 ? 'события' : 'событий'} · ${calendar.visible === false ? 'Скрыт' : 'Показывается'}`)),
+            h('small', null, `${count} ${plural(count, ['событие', 'события', 'событий'])} · ${calendar.visible === false ? 'Скрыт' : 'Показывается'}`)),
           selected ? h('span', { class: 'calendar-selected-mark' }, ic('check', 16)) : null),
         h('button', { type: 'button', class: 'calendar-manage-edit', 'aria-label': 'Настроить календарь', onclick: () => openCalendarEditor(calendar, draw) }, ic('edit', 17)),
         toggle(calendar.visible !== false, (visible) => { S.upsert('calendars', { id: calendar.id, visible }); draw(); }),
@@ -152,7 +153,7 @@ export function openCalendarManager(onFilters) {
     left: null,
     right: { label: 'Готово', bold: true },
     tall: true,
-    build() { draw(); },
+    build(sheet) { api = sheet; draw(); },
   });
   return api;
 }
