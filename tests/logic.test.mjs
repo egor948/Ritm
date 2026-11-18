@@ -152,7 +152,7 @@ test('элементы дня: события, задачи, привычки, �
       { id: 'e2', title: 'ДР', date: T, allDay: true },
     ],
     tasks: [
-      { id: 't1', title: 'Позвонить', date: T, time: '10:30', duration: 30, goalId: 'g' },
+      { id: 't1', title: 'Позвонить', date: T, time: '10:30', duration: 120, goalId: 'g' },
       { id: 't2', title: 'Купить', date: T },
       { id: 't3', title: 'Другой день', date: '2026-11-16' },
     ],
@@ -163,6 +163,7 @@ test('элементы дня: события, задачи, привычки, �
   assert.equal(d.timed.length, 2);
   assert.equal(d.timed[0].title, 'Встреча');
   assert.equal(d.timed[1].color, 'green'); // цвет задачи наследуется от цели
+  assert.equal(d.timed[1].endMin - d.timed[1].startMin, 30); // старое поле duration больше не влияет на задачи
   assert.equal(d.allDay.length, 1);
   assert.equal(d.dated.length, 1);
   assert.equal(d.habits.length, 1);
