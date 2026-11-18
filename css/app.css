@@ -589,6 +589,15 @@ small { font-size: 12px; }
 .w-tasks .task-swipe-shell + .task-swipe-shell { border-top: 0.5px solid var(--sep); }
 .w-tasks .add-row { padding-left: 0; }
 
+/* В виджете задач строки сливаются с общей карточкой; красная кнопка свайпа остаётся отдельной. */
+.w-tasks .task-swipe-shell,
+.w-tasks .task-swipe-foreground {
+  background: transparent !important;
+}
+.w-tasks .task-swipe-delete {
+  background: var(--c-red);
+}
+
 /* ---------- календарь ---------- */
 .cal-head { display: flex; flex-direction: column; gap: 10px; }
 .cal-top { display: flex; align-items: center; justify-content: space-between; }
