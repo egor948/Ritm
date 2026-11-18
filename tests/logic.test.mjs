@@ -328,3 +328,20 @@ test('в хранилище доступен базовый календарь �
   const data = Store.data();
   assert.ok(data.calendars.some((calendar) => calendar.id === DEFAULT_CALENDAR_ID && calendar.isDefault));
 });
+
+test('цвет событий наследуется от календаря, а ручное переопределение сохраняется', () => {
+  const data = {
+    calendars: [
+      { id: DEFAULT_CALENDAR_ID, color: 'blue', visible: true },
+      { id: 'birthdays', color: 'pink', visible: true },
+    ],
+    events: [
+      { id: 'inherited', title: 'Вечеринка', date: T, start: '09:00', end: '10:00', calendarId: 'birthdays', color: 'blue', colorOverride: false },
+      { id: 'custom', title: 'Старое событие', date: T, start: '11:00', end: '12:00', calendarId: DEFAULT_CALENDAR_ID, color: 'orange', colorOverride: true },
+    ],
+    tasks: [], habits: [], goals: [],
+  };
+  const items = L.dayItems(data, T);
+  assert.equal(items.timed.find((item) => item.id === 'inherited').color, 'pink');
+  assert.equal(items.timed.find((item) => item.id === 'custom').color, 'orange');
+});
