@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as L from '../js/logic.js';
 import * as U from '../js/util.js';
+import { filterCalendarEvents, DEFAULT_CALENDAR_ID } from '../js/calendars.js';
 
 const T = '2026-11-15'; // воскресенье
 const mkHabit = (o = {}) => ({ id: 'h1', title: 'Бег', type: 'check', schedule: { type: 'daily' }, startDate: '2026-10-01', ...o });
@@ -303,4 +304,21 @@ test('независимые напоминания сохраняются да�
   const task = { id: 't', title: 'Задача', done: false, reminders: [{ id: 'r', date: '2026-11-15', time: '13:00' }] };
   assert.equal(L.buildReminders({ tasks: [task], events: [], settings: { notifyTasks: true } }, new Map(), now).length, 1);
   assert.equal(L.buildReminders({ tasks: [{ ...task, done: true }], events: [], settings: { notifyTasks: true } }, new Map(), now).length, 0);
+});
+
+test('календарные папки фильтруют события по видимости и выбранному календарю', () => {
+  const calendars = [
+    { id: DEFAULT_CALENDAR_ID, visible: true },
+    { id: 'birthdays', visible: true },
+    { id: 'work', visible: false },
+  ];
+  const events = [
+    { id: 'old-event', title: 'Старое событие' },
+    { id: 'birthday', calendarId: 'birthdays' },
+    { id: 'meeting', calendarId: 'work' },
+  ];
+  assert.deepEqual(filterCalendarEvents(events, calendars).map((event) => event.id), ['old-event', 'birthday']);
+  assert.deepEqual(filterCalendarEvents(events, calendars, 'birthdays').map((event) => event.id), ['birthday']);
+  assert.deepEqual(filterCalendarEvents(events, calendars, 'work'), []);
+  assert.equal(events.length, 3);
 });
