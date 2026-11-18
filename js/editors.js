@@ -181,7 +181,7 @@ export function editTask(task, defaults = {}) {
     draft,
     valid: (d) => (!d.title.trim() ? 'Введите название задачи' : changedDateIsPast(d.date, originalDate, dateWasChanged) ? 'Нельзя назначить задачу на прошедшую дату' : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем' : null),
     onSave: (d) => {
-      const out = { ...d, title: d.title.trim(), priority: Number(d.priority ?? 0), checklist: d.checklist.filter((c) => c.text.trim()) };
+      const out = { ...d, title: d.title.trim(), priority: normalizePriority(d.priority), checklist: d.checklist.filter((c) => c.text.trim()) };
       out.reminders = (out.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time }));
       out.duration = null;
       // Старые поля больше не используются после миграции в массив.
@@ -234,23 +234,40 @@ export function editTask(task, defaults = {}) {
   });
 }
 
+function normalizePriority(value) {
+  const priority = Number(value);
+  return Number.isInteger(priority) && priority >= 0 && priority <= 3 ? priority : 0;
+}
+
 function prioritySelector(d) {
   const options = [{ value: 0, label: 'Нет' }, { value: 1, label: '!' }, { value: 2, label: '!!' }, { value: 3, label: '!!!' }];
-  const control = h('div', { class: 'priority-selector', role: 'group', 'aria-label': 'Приоритет задачи' });
-  const buttons = options.map((option) => h('button', {
-    type: 'button',
-    class: 'priority-option' + (Number(d.priority ?? 0) === option.value ? ' on' : ''),
-    'aria-pressed': Number(d.priority ?? 0) === option.value ? 'true' : 'false',
-    onclick: () => {
-      d.priority = option.value;
-      buttons.forEach((button, index) => {
-        const active = options[index].value === option.value;
+  d.priority = normalizePriority(d.priority);
+  const control = h('div', {
+    class: 'priority-selector',
+    role: 'group',
+    'aria-label': 'Приоритет задачи',
+    onclick: (event) => {
+      const target = event.target.closest && event.target.closest('button[data-priority]');
+      if (!target || !control.contains(target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      d.priority = normalizePriority(target.dataset.priority);
+      control.querySelectorAll('button[data-priority]').forEach((button) => {
+        const active = normalizePriority(button.dataset.priority) === d.priority;
         button.classList.toggle('on', active);
         button.setAttribute('aria-pressed', active ? 'true' : 'false');
       });
     },
-  }, option.label));
-  control.append(...buttons);
+  });
+  options.forEach((option) => {
+    const active = d.priority === option.value;
+    control.appendChild(h('button', {
+      type: 'button',
+      class: 'priority-option' + (active ? ' on' : ''),
+      'data-priority': String(option.value),
+      'aria-pressed': active ? 'true' : 'false',
+    }, option.label));
+  });
   return control;
 }
 
