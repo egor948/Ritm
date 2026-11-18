@@ -231,6 +231,11 @@ const TASK_CALENDAR_SLOT_MINUTES = 30; // Только визуальный ра
  */
 export function dayItems(data, date, opts = {}) {
   const f = { events: true, tasks: true, habits: true, goals: true, ...(opts.filters || {}) };
+  const calendarById = new Map((data.calendars || []).map((calendar) => [calendar.id, calendar]));
+  const eventColor = (event) => {
+    const calendar = calendarById.get(event.calendarId || 'calendar-default');
+    return event.colorOverride ? (event.color || 'blue') : (calendar && calendar.color) || event.color || 'blue';
+  };
   const goalColor = (gid) => {
     const g = data.goals.find((x) => x.id === gid);
     if (!g) return null;
@@ -242,7 +247,7 @@ export function dayItems(data, date, opts = {}) {
   if (f.events) {
     for (const o of expandEvents(data.events, date, date)) {
       const e = o.ref;
-      if (e.allDay || !e.start) allDay.push({ ...o, title: e.title, color: e.color || 'blue' });
+      if (e.allDay || !e.start) allDay.push({ ...o, title: e.title, color: eventColor(e) });
       else {
         const s = toMin(e.start);
         let en = e.end ? toMin(e.end) : s + 60;
