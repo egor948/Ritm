@@ -664,8 +664,9 @@ small { font-size: 12px; }
   box-shadow: inset 0 0 0 0.5px var(--sep);
 }
 .reminder-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.reminder-card-title { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
-.reminder-card-title svg { color: var(--accent); flex: none; }
+.reminder-card-heading { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.reminder-card-heading svg { color: var(--accent); flex: none; }
+.reminder-card-heading span { white-space: nowrap; }
 .reminder-remove {
   display: grid; place-items: center; flex: none; width: 30px; height: 30px;
   border-radius: 50%; color: var(--label-2); background: var(--fill);
