@@ -260,3 +260,29 @@ test('слияние: побеждает более свежая запись', 
   assert.equal(L.pickNewer({ updatedAt: 9 }, { updatedAt: 5 }).updatedAt, 9);
   assert.equal(L.pickNewer(null, { updatedAt: 1 }).updatedAt, 1);
 });
+
+test('несколько независимых напоминаний задачи и события с собственными датами и временем', () => {
+  const now = new Date(2026, 10, 15, 12, 0, 0);
+  const data = {
+    events: [{ id: 'ev-multi', title: 'Встреча', date: '2026-11-15', start: '15:00',
+      reminders: [{ id: 'r1', date: '2026-11-15', time: '12:30' }, { id: 'r2', date: '2026-11-16', time: '08:15' }] }],
+    tasks: [{ id: 'tk-multi', title: 'Подготовить отчёт', date: '2026-11-20',
+      reminders: [{ id: 'a', date: '2026-11-15', time: '13:10' }, { id: 'b', date: '2026-11-18', time: '19:45' }] }],
+    habits: [], goals: [],
+  };
+  const reminders = L.buildReminders(data, new Map(), now, 14);
+  assert.deepEqual(reminders.map((r) => r.id), [
+    'evr:ev-multi:r1', 'tkr:tk-multi:a', 'evr:ev-multi:r2', 'tkr:tk-multi:b',
+  ]);
+  assert.equal(new Date(reminders[0].fireAt).getTime(), new Date(2026, 10, 15, 12, 30).getTime());
+  assert.equal(new Date(reminders[1].fireAt).getTime(), new Date(2026, 10, 15, 13, 10).getTime());
+  assert.equal(new Date(reminders[2].fireAt).getTime(), new Date(2026, 10, 16, 8, 15).getTime());
+  assert.equal(new Date(reminders[3].fireAt).getTime(), new Date(2026, 10, 18, 19, 45).getTime());
+});
+
+test('независимые напоминания сохраняются даже без даты задачи и не отправляются после выполнения', () => {
+  const now = new Date(2026, 10, 15, 12, 0, 0);
+  const task = { id: 't', title: 'Задача', done: false, reminders: [{ id: 'r', date: '2026-11-15', time: '13:00' }] };
+  assert.equal(L.buildReminders({ tasks: [task], events: [], settings: { notifyTasks: true } }, new Map(), now).length, 1);
+  assert.equal(L.buildReminders({ tasks: [{ ...task, done: true }], events: [], settings: { notifyTasks: true } }, new Map(), now).length, 0);
+});
