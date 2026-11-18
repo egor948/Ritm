@@ -800,6 +800,7 @@ small { font-size: 12px; }
 }
 .reminder-remove:active { transform: scale(.92); background: var(--sep); }
 .reminder-fields { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; }
+.reminder-relative-fields { grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); }
 .reminder-relative-fields .inp.sel, .reminder-relative-fields .inp.num { width: 100%; max-width: 100%; box-sizing: border-box; }
 .reminder-relative-fields .inp.sel { text-align: left; text-align-last: left; }
 .reminder-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
