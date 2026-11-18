@@ -9,6 +9,7 @@ import { progressBar, taskRow } from './components.js';
 import { editGoal, editTask, editHabit } from './editors.js';
 import { openHabitDetail } from './habits.js';
 import { view } from './nav.js';
+import { isTaskInCompletionWindow } from './task-completion.js';
 
 const expandedBlocks = new Set(); // свёрнутые подцели хранятся здесь (по умолчанию всё раскрыто)
 
@@ -156,8 +157,9 @@ function sortTasks(list) {
   return [...list].sort((a, b) => (a.done - b.done) || (a.date || '9999').localeCompare(b.date || '9999') || (b.priority || 0) - (a.priority || 0) || (a.createdAt || 0) - (b.createdAt || 0));
 }
 export function taskList(list, data, { goalId } = {}) {
-  if (!list.length) return h('div', { class: 'hint' }, 'Пока нет задач.');
-  return h('div', { class: 'card list' }, sortTasks(list).map((t) => taskRow(t, data, { showGoal: false })));
+  const visible = list.filter((t) => !t.done || isTaskInCompletionWindow(t.id));
+  if (!visible.length) return h('div', { class: 'hint' }, 'Пока нет задач.');
+  return h('div', { class: 'card list' }, sortTasks(visible).map((t) => taskRow(t, data, { showGoal: false })));
 }
 
 function subBlock(sub, data, parentColor, api) {
@@ -173,7 +175,9 @@ function subBlock(sub, data, parentColor, api) {
       h('span', { class: 'chev' + (collapsed ? '' : ' open') }, ic('chevD', 18))),
     collapsed ? null : h('div', { class: 'sub-body' },
       sub.progressMode === 'metric' ? metricCard(sub, color, true) : null,
-      tasks.length ? sortTasks(tasks).map((t) => taskRow(t, data, { showGoal: false })) : h('div', { class: 'hint tight' }, 'В этой подцели пока нет задач.'),
+      tasks.some((t) => !t.done || isTaskInCompletionWindow(t.id))
+        ? sortTasks(tasks.filter((t) => !t.done || isTaskInCompletionWindow(t.id))).map((t) => taskRow(t, data, { showGoal: false }))
+        : h('div', { class: 'hint tight' }, 'В этой подцели пока нет активных задач.'),
       h('button', { class: 'add-row', onclick: () => editTask(null, { goalId: sub.id }) }, ic('plus', 18), 'Добавить задачу')));
 }
 
