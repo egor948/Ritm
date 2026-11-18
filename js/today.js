@@ -90,13 +90,13 @@ const RENDER = {
     for (const d of items.deadlines) rows.push({ k: 'g' + d.id, time: 'срок', title: `Цель: ${d.title}`, color: d.color, sub: null, onClick: () => openGoalDetail(d.id), past: false, order: -2 });
     for (const a of items.allDay) rows.push({ k: a.key, time: 'весь день', title: a.title, color: a.color, sub: a.ref.location, onClick: () => editEvent(a.ref, {}, today), past: false, order: -1 });
     for (const t of items.timed) rows.push({
-      k: t.key, taskId: t.type === 'task' ? t.id : null, time: fromMin(t.startMin), end: fromMin(t.endMin), title: t.title, color: t.color, sub: t.type === 'event' ? t.ref.location : 'Задача', past: t.endMin <= now || t.done, order: t.startMin,
+      k: t.key, taskId: t.type === 'task' ? t.id : null, taskDone: !!t.done, time: fromMin(t.startMin), end: fromMin(t.endMin), title: t.title, color: t.color, sub: t.type === 'event' ? t.ref.location : 'Задача', past: t.endMin <= now || t.done, order: t.startMin,
       onClick: () => (t.type === 'event' ? editEvent(t.ref, {}, today) : editTask(t.ref)),
     });
     rows.sort((a, b) => a.order - b.order);
     const shown = rows.slice(0, 5);
     const body = rows.length
-      ? h('div', { class: 'ag-list' }, shown.map((r) => h('div', { class: 'ag-row' + (r.past ? ' past' : '') + (r.taskId && isTaskExitStarted(r.taskId) ? ' task-completion-exit' : ''), ...(r.taskId ? { 'data-task-id': r.taskId } : {}), style: { '--c': cv(r.color) }, onclick: (e) => { e.stopPropagation(); r.onClick(); } },
+      ? h('div', { class: 'ag-list' }, shown.map((r) => h('div', { class: 'ag-row' + (r.past ? ' past' : '') + (r.taskId && isTaskExitStarted(r.taskId) ? ' task-completion-exit' : ''), ...(r.taskId ? { 'data-task-id': r.taskId, 'data-task-done': r.taskDone ? 'true' : 'false' } : {}), style: { '--c': cv(r.color) }, onclick: (e) => { e.stopPropagation(); r.onClick(); } },
         h('div', { class: 'ag-time' }, h('b', null, r.time), r.end ? h('span', null, r.end) : null), h('i', { class: 'ag-bar' }),
         h('div', { class: 'ag-main' }, h('b', null, r.title), r.sub ? h('span', null, r.sub) : null))),
         rows.length > 5 ? h('div', { class: 'w-more' }, `и ещё ${rows.length - 5}`) : null)
