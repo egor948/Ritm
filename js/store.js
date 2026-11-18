@@ -3,6 +3,9 @@ import { uid, ymd } from './util.js';
 import { buildLogIndex, pickNewer } from './logic.js';
 
 const KEY = 'rhythm.v1';
+const LOCAL_THEME_KEY = 'rhythm.device.theme';
+const THEMES = ['auto', 'light', 'dark'];
+let deviceTheme = null;
 let storageKey = KEY;
 const accountKey = (userId) => userId ? `${KEY}.account.${userId}` : KEY;
 export const KINDS = ['goals', 'tasks', 'events', 'habits', 'logs'];
@@ -20,7 +23,6 @@ export const DEFAULT_WIDGETS = [
 ];
 
 const defaultSettings = () => ({
-  theme: 'auto', // auto | light | dark
   weekStart: 1, // 1 = понедельник
   calView: 'day',
   calFilters: { events: true, tasks: true, habits: true, goals: true },
@@ -118,6 +120,52 @@ export function data() {
   return snap;
 }
 export const settings = () => state.settings;
+
+/** Тема интерфейса хранится отдельно от профиля и облачных настроек. */
+export function localTheme() {
+  if (deviceTheme !== null) return deviceTheme;
+
+  let stored = null;
+  let canPersist = false;
+  try {
+    stored = localStorage.getItem(LOCAL_THEME_KEY);
+    canPersist = true;
+  } catch (_) { /* localStorage может быть недоступен в приватном режиме */ }
+
+  if (THEMES.includes(stored)) {
+    deviceTheme = stored;
+  } else {
+    // Однократно переносим старую тему из локальных настроек этого устройства.
+    deviceTheme = THEMES.includes(state.settings.theme) ? state.settings.theme : 'auto';
+    try {
+      localStorage.setItem(LOCAL_THEME_KEY, deviceTheme);
+      canPersist = true;
+    } catch (_) { canPersist = false; }
+  }
+
+  // Удаляем legacy-поле только после того, как локальная копия надёжно записана.
+  if (canPersist && Object.prototype.hasOwnProperty.call(state.settings, 'theme')) {
+    delete state.settings.theme;
+    save();
+  }
+  return deviceTheme;
+}
+
+export function setLocalTheme(theme) {
+  deviceTheme = THEMES.includes(theme) ? theme : 'auto';
+  try { localStorage.setItem(LOCAL_THEME_KEY, deviceTheme); } catch (_) { /* используем значение в памяти до перезапуска */ }
+  if (Object.prototype.hasOwnProperty.call(state.settings, 'theme')) {
+    delete state.settings.theme;
+    save();
+  }
+  return deviceTheme;
+}
+
+const syncableSettings = () => {
+  const { theme: _localOnlyTheme, ...shared } = state.settings;
+  return shared;
+};
+
 export const raw = () => state;
 export const find = (kind, id) => state[kind].find((x) => x.id === id && !x.deleted) || null;
 
@@ -177,7 +225,10 @@ export function setLog(habitId, date, value) {
 }
 
 export function setSettings(patch) {
-  state.settings = { ...state.settings, ...patch, updatedAt: Date.now() };
+  const sharedPatch = { ...patch };
+  delete sharedPatch.theme; // тема устройства никогда не записывается в профиль
+  state.settings = { ...state.settings, ...sharedPatch, updatedAt: Date.now() };
+  if (deviceTheme !== null) delete state.settings.theme;
   state.dirty['settings:main'] = 1;
   commit();
 }
@@ -207,7 +258,7 @@ export function dirtyEntries() {
   for (const key of Object.keys(state.dirty)) {
     const [kind, ...rest] = key.split(':');
     const id = rest.join(':');
-    if (kind === 'settings') out.push({ kind, id: 'main', data: state.settings, key });
+    if (kind === 'settings') out.push({ kind, id: 'main', data: syncableSettings(), key });
     else {
       const rec = state[kind] && state[kind].find((x) => x.id === id);
       if (rec) out.push({ kind, id, data: rec, key, updatedAt: rec.updatedAt });
@@ -234,8 +285,12 @@ export function applyRemote(rows) {
     const rec = row.data;
     if (!rec) continue;
     if (row.kind === 'settings') {
+      // Сохраняем старую локальную тему до чтения настроек с сервера.
+      localTheme();
       if ((rec.updatedAt || 0) > (state.settings.updatedAt || 0)) {
-        state.settings = { ...defaultSettings(), ...rec };
+        const shared = { ...rec };
+        delete shared.theme;
+        state.settings = { ...defaultSettings(), ...shared };
         changed++;
       }
       continue;
@@ -257,8 +312,8 @@ export function applyRemote(rows) {
 
 // ---------- Экспорт / импорт ----------
 export function exportJSON() {
-  const { goals, tasks, events, habits, logs, settings: st } = state;
-  return JSON.stringify({ app: 'rhythm', version: 1, exportedAt: new Date().toISOString(), goals, tasks, events, habits, logs, settings: st }, null, 2);
+  const { goals, tasks, events, habits, logs } = state;
+  return JSON.stringify({ app: 'rhythm', version: 1, exportedAt: new Date().toISOString(), goals, tasks, events, habits, logs, settings: syncableSettings() }, null, 2);
 }
 export function importJSON(text, { replace = true } = {}) {
   const obj = JSON.parse(text);
@@ -287,7 +342,9 @@ export function resetAll() {
   commit();
 }
 export function replaceAllWith(newState) {
-  state = { ...emptyState(), ...newState, settings: { ...defaultSettings(), ...(newState.settings || {}) } };
+  const nextSettings = { ...defaultSettings(), ...(newState.settings || {}) };
+  delete nextSettings.theme;
+  state = { ...emptyState(), ...newState, settings: nextSettings };
   commit();
 }
 
@@ -296,6 +353,7 @@ export function switchAccount(userId = null) {
   flush();
   storageKey = accountKey(userId);
   state = load(storageKey);
+  if (deviceTheme !== null) delete state.settings.theme;
   snap = null;
   commit();
   flush();
@@ -353,6 +411,7 @@ export function mergeGuestIntoCurrent(userId) {
   }
   if ((guest.settings?.updatedAt || 0) > (account.settings?.updatedAt || 0)) {
     account.settings = { ...defaultSettings(), ...guest.settings };
+    if (deviceTheme !== null) delete account.settings.theme;
     account.dirty['settings:main'] = 1;
     mergedCount++;
   }
