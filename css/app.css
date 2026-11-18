@@ -815,6 +815,41 @@ small { font-size: 12px; }
 }
 .reminder-add:active { transform: scale(.985); background: color-mix(in srgb, var(--accent) 10%, var(--sheet-group)); }
 
+
+/* Управление пользовательскими календарями */
+.calendar-show-all {
+  width: 100%; display: flex; align-items: center; justify-content: flex-start;
+  min-height: 48px; padding: 0 16px; margin: 0 0 12px;
+  border-radius: 14px; background: var(--sheet-group); color: var(--label);
+  font: inherit; font-size: 15px; text-align: left; transition: background .18s ease;
+}
+.calendar-show-all.selected { color: var(--accent); font-weight: 650; }
+.calendar-manage-row {
+  display: flex; align-items: center; gap: 10px; min-height: 66px;
+  padding: 9px 14px; box-sizing: border-box;
+}
+.calendar-manage-open {
+  display: flex; align-items: center; gap: 11px; flex: 1; min-width: 0;
+  min-height: 44px; text-align: left; border-radius: 10px;
+}
+.calendar-manage-open.selected .calendar-manage-copy b { color: var(--accent); }
+.calendar-color-dot {
+  display: block; flex: none; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--c); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 14%, transparent);
+}
+.calendar-manage-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.calendar-manage-copy b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 650; }
+.calendar-manage-copy small { color: var(--label-2); font-size: 12px; }
+.calendar-selected-mark { color: var(--accent); display: flex; align-items: center; }
+.calendar-manage-edit {
+  display: grid; place-items: center; flex: none; width: 34px; height: 34px;
+  border-radius: 50%; color: var(--label-2); background: var(--fill);
+}
+.calendar-manage-edit:active { background: var(--sep); }
+.calendar-editor-name { padding: 10px 14px; }
+.calendar-delete-btn { color: var(--c-red); }
+.calendar-delete-btn .ic { color: var(--c-red); }
+
 /* Статус синхронизации отдельной строкой под email */
 .sync-summary { min-width: 0; }
 .sync-summary .row-label { flex: 1 1 auto; white-space: normal; overflow-wrap: anywhere; }
