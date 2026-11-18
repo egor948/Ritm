@@ -597,6 +597,7 @@ small { font-size: 12px; }
 .cal-title { display: flex; flex-direction: column; align-items: flex-start; text-align: left; min-width: 0; line-height: 1.1; }
 .cal-title b { font-size: 27px; font-weight: 800; letter-spacing: -0.022em; white-space: nowrap; }
 .cal-title small { font-size: 13px; font-weight: 600; color: var(--label-2); margin-top: 2px; }
+.cal-title .cal-selected-label { color: var(--accent); font-size: 12px; font-weight: 650; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-ctl { display: flex; align-items: center; gap: 10px; }
 .cal-ctl .seg { flex: 1; min-width: 0; }
 .today-btn { font-size: 15px; font-weight: 600; color: var(--accent); padding: 6px 2px; }
