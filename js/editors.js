@@ -1,5 +1,5 @@
 // Редакторы: задача, событие, привычка, цель + быстрое добавление и подтверждения.
-import { h, uid, todayStr, addDays, fromMin, toMin, ymd, clear, WD_SHORT, plural, captureScrollPosition, restoreScrollPosition } from './util.js';
+import { h, uid, todayStr, addDays, fromMin, toMin, ymd, localDate, clear, WD_SHORT, plural, captureScrollPosition, restoreScrollPosition } from './util.js';
 import * as S from './store.js';
 import { REPEAT_LABELS, isReminderInFuture, isDateNotPast } from './logic.js';
 import {
@@ -334,23 +334,121 @@ function checklistGroup(d) {
   return g;
 }
 
+const EVENT_REMINDER_UNITS = [
+  { v: 'minutes', label: 'Минуты', factor: 1 },
+  { v: 'hours', label: 'Часы', factor: 60 },
+  { v: 'days', label: 'Дни', factor: 1440 },
+  { v: 'weeks', label: 'Недели', factor: 10080 },
+];
+const EVENT_REMINDER_FACTORS = Object.fromEntries(EVENT_REMINDER_UNITS.map((unit) => [unit.v, unit.factor]));
+
+function reminderUnitForMinutes(minutes) {
+  if (minutes === 0) return { amount: 0, unit: 'minutes' };
+  for (const unit of [...EVENT_REMINDER_UNITS].reverse()) {
+    if (minutes % unit.factor === 0) return { amount: minutes / unit.factor, unit: unit.v };
+  }
+  return { amount: minutes, unit: 'minutes' };
+}
+
+// Переводит старые абсолютные напоминания мероприятий в относительные интервалы.
+function normalizeEventReminder(reminder, event) {
+  if (reminder && EVENT_REMINDER_FACTORS[reminder.unit] && reminder.amount != null) {
+    return { id: reminder.id || uid(), amount: Number(reminder.amount), unit: reminder.unit };
+  }
+  if (!reminder?.date || !reminder?.time || !event?.date) return null;
+  const startTime = event.allDay || !event.start ? '09:00' : event.start;
+  const start = localDate(event.date, startTime);
+  const fireAt = localDate(reminder.date, reminder.time);
+  const minutes = Math.round((start.getTime() - fireAt.getTime()) / 60000);
+  if (!Number.isFinite(minutes) || minutes < 0) return null;
+  return { id: reminder.id || uid(), ...reminderUnitForMinutes(minutes) };
+}
+
+function eventReminderDraft(event = {}) {
+  const reminders = (event.reminders || []).map((r) => normalizeEventReminder(r, event)).filter(Boolean);
+  if (!reminders.length && event.reminderMin != null && Number.isFinite(Number(event.reminderMin)) && Number(event.reminderMin) >= 0) {
+    const minutes = event.allDay ? 0 : Math.round(Number(event.reminderMin));
+    reminders.push({ id: uid(), ...reminderUnitForMinutes(minutes) });
+  }
+  const seen = new Set();
+  return reminders.filter((r) => {
+    const key = Number(r.amount) * (EVENT_REMINDER_FACTORS[r.unit] || 0);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function eventRemindersError(reminders) {
+  const seen = new Set();
+  for (const reminder of reminders || []) {
+    const amount = Number(reminder.amount);
+    if (reminder.amount == null || reminder.amount === '' || !Number.isInteger(amount) || amount < 0 || amount > 9999 || !EVENT_REMINDER_FACTORS[reminder.unit]) {
+      return 'Укажите целое количество от 0 до 9999 и единицу времени';
+    }
+    const total = amount * EVENT_REMINDER_FACTORS[reminder.unit];
+    if (seen.has(total)) return 'Уберите повторяющиеся напоминания';
+    seen.add(total);
+  }
+  return null;
+}
+
+function eventRemindersGroup(d) {
+  if (!Array.isArray(d.reminders)) d.reminders = [];
+  const list = h('div', { class: 'reminder-list' });
+  let addButton;
+
+  const makeCard = (reminder) => {
+    reminder.id = reminder.id || uid();
+    if (!EVENT_REMINDER_FACTORS[reminder.unit]) reminder.unit = 'minutes';
+    if (reminder.amount == null) reminder.amount = 5;
+    const unit = selectInput(EVENT_REMINDER_UNITS.map(({ v, label }) => ({ v, label })), reminder.unit, (v) => { reminder.unit = v; });
+    const amount = numberInput(reminder.amount, (v) => { reminder.amount = v; }, { placeholder: '5', step: '1', width: '100%' });
+    amount.min = '0';
+    amount.max = '9999';
+
+    const card = h('div', { class: 'reminder-card' },
+      h('div', { class: 'reminder-card-head' },
+        h('div', { class: 'reminder-card-title' }, h('span', {}, 'Напоминание')),
+        h('button', { type: 'button', class: 'reminder-remove', 'aria-label': 'Удалить напоминание', onclick: () => {
+          const index = d.reminders.findIndex((item) => item.id === reminder.id);
+          if (index < 0) return;
+          d.reminders.splice(index, 1);
+          card.remove();
+        } }, ic('x', 15))),
+      h('div', { class: 'reminder-fields reminder-relative-fields' },
+        h('label', { class: 'reminder-field' }, h('span', {}, 'Единица времени'), unit),
+        h('label', { class: 'reminder-field' }, h('span', {}, 'Количество'), amount)));
+    return card;
+  };
+
+  d.reminders.forEach((reminder) => list.appendChild(makeCard(reminder)));
+  addButton = h('button', {
+    type: 'button',
+    class: 'reminder-add',
+    onclick: () => {
+      const reminder = { id: uid(), amount: 5, unit: 'minutes' };
+      d.reminders.push(reminder);
+      list.insertBefore(makeCard(reminder), addButton);
+    },
+  }, ic('plus', 17), 'Добавить напоминание');
+  list.appendChild(addButton);
+  return list;
+}
+
 export function editEvent(ev, defaults = {}, occDate = null) {
   const isNew = !ev;
   const base = { title: '', date: todayStr(), start: '10:00', end: '11:00', allDay: false, endDate: null, color: 'blue', location: '', notes: '', reminderMin: null, reminders: [], repeat: { freq: 'none', interval: 1, days: [], until: null } };
-  const draft = ev ? { ...base, ...ev, reminders: (ev.reminders || []).map((r) => ({ ...r })), repeat: { ...base.repeat, ...(ev.repeat || {}) } } : { ...base, ...defaults, reminders: (defaults.reminders || []).map((r) => ({ ...r })) };
+  const source = ev || defaults;
+  const draft = ev ? { ...base, ...ev, reminders: eventReminderDraft(source), repeat: { ...base.repeat, ...(ev.repeat || {}) } } : { ...base, ...defaults, reminders: eventReminderDraft(source) };
   const originalDate = ev ? (ev.date || null) : null;
   let dateWasChanged = false;
-  draft.reminders = (draft.reminders || []).map((r) => ({ ...r, id: r.id || uid() }));
-  const originalReminders = reminderSnapshot(draft.reminders);
-  const data = S.data();
-  const tmpl = data.events;
-  void tmpl;
   return editorShell({
     title: isNew ? 'Новое событие' : 'Событие',
     draft,
-    valid: (d) => (!d.title.trim() ? 'Введите название события' : changedDateIsPast(d.date, originalDate, dateWasChanged) ? 'Нельзя назначить мероприятие на прошедшую дату' : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем' : !d.allDay && d.end && d.start && toMin(d.end) <= toMin(d.start) ? 'Время окончания должно быть позже начала' : null),
+    valid: (d) => (!d.title.trim() ? 'Введите название события' : changedDateIsPast(d.date, originalDate, dateWasChanged) ? 'Нельзя назначить мероприятие на прошедшую дату' : eventRemindersError(d.reminders) || (!d.allDay && d.end && d.start && toMin(d.end) <= toMin(d.start) ? 'Время окончания должно быть позже начала' : null)),
     onSave: (d) => {
-      const out = { ...d, title: d.title.trim(), reminders: (d.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time })) };
+      const out = { ...d, title: d.title.trim(), reminders: (d.reminders || []).map((r) => ({ id: r.id || uid(), amount: Number(r.amount), unit: r.unit })) };
       out.reminderMin = null;
       if (out.allDay) { out.start = null; out.end = null; if (out.endDate && out.endDate <= out.date) out.endDate = null; } else out.endDate = null;
       if (out.repeat.freq === 'none') out.repeat = { freq: 'none' };
@@ -403,7 +501,8 @@ export function editEvent(ev, defaults = {}, occDate = null) {
           r.freq && r.freq !== 'none' ? row('Повторять до', dateInput(r.until, (v) => (r.until = v))) : null,
           ),
         groupTitle('Напоминания'),
-        remindersGroup(d, redraw, d.date),
+        eventRemindersGroup(d),
+        groupNote('Напоминания рассчитываются относительно начала мероприятия. Для событий на весь день точка отсчёта — 09:00.'),
         groupTitle('Цвет'),
         group(h('div', { class: 'row' }, colorPicker(d.color, (v) => (d.color = v)))),
         group(h('div', { class: 'row solo' }, textInput({ value: d.notes, placeholder: 'Заметки', multiline: true, onInput: (v) => (d.notes = v) }))),
