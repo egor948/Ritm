@@ -108,10 +108,9 @@ export function openWidgetsEditor() {
         const movePlaceholder = (y) => {
           if (!placeholder || !dragging) return;
           const candidates = getRows().filter((node) => node !== itemRow);
-          const before = candidates.find((node) => {
-            const rect = node.getBoundingClientRect();
-            return y < rect.top + rect.height / 2;
-          }) || null;
+          // offsetTop остаётся стабильным во время FLIP-анимации соседних строк.
+          const contentY = y - widgetGroup.getBoundingClientRect().top;
+          const before = candidates.find((node) => contentY < node.offsetTop + node.offsetHeight / 2) || null;
           if (before === placeholder.nextElementSibling) return;
           if (!before && widgetGroup.lastElementChild === placeholder) return;
 
@@ -188,6 +187,7 @@ export function openWidgetsEditor() {
 
           if (dragging && placeholder && placeholder.isConnected) {
             const releaseTop = preview ? Number.parseFloat(preview.style.top) : itemRow.getBoundingClientRect().top;
+            const finalPositions = capturePositions(getRows().filter((node) => node !== itemRow));
             placeholder.replaceWith(itemRow);
             if (preview) preview.remove();
             preview = null;
@@ -197,6 +197,7 @@ export function openWidgetsEditor() {
             for (const property of ['position', 'left', 'top', 'width', 'height', 'margin', 'opacity']) {
               itemRow.style.removeProperty(property);
             }
+            animatePositions(finalPositions);
             const finalTop = itemRow.getBoundingClientRect().top;
             const delta = releaseTop - finalTop;
             if (Math.abs(delta) > 1) {
@@ -205,7 +206,7 @@ export function openWidgetsEditor() {
                   { transform: 'translateY(' + delta + 'px) scale(1.025)', boxShadow: '0 14px 34px rgba(0,0,0,.18)' },
                   { transform: 'translateY(0) scale(1)', boxShadow: '0 0 0 rgba(0,0,0,0)' },
                 ],
-                { duration: 340, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+                { duration: 360, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
               );
             }
             if (changed) saveOrder();
