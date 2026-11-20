@@ -212,7 +212,7 @@ function timeline({ dates, mode, data, filters, extraHeader }) {
         class: 'blk ' + (isTask ? 'task' : 'event') + (!isTask && it.ref.externalReadOnly ? ' external-event' : '') + (it.done ? ' done' : '') + (isTask && isTaskExitStarted(it.id) ? ' task-completion-exit' : '') + (small ? ' small' : ''),
         ...(isTask ? { 'data-task-id': it.id, 'data-task-done': it.done ? 'true' : 'false' } : {}),
         style: { top: top + 'px', height: height + 'px', left: `calc(${(lay.col / lay.cols) * 100}% + 1px)`, width: `calc(${100 / lay.cols}% - 3px)`, '--c': cv(it.color) },
-        onclick: (e) => { e.stopPropagation(); if (isTask) editTask(it.ref); else if (it.ref.externalReadOnly) openExternalEventDetails(it.ref); else editEvent(it.ref, {}, date); },
+        onclick: (e) => { e.stopPropagation(); if (isTask) editTask(it.ref); else if (it.ref.externalReadOnly) openExternalEventDetails({ ...it.ref, date: it.date }); else editEvent(it.ref, {}, date); },
       },
         isTask ? h('span', { class: 'blk-chk' + (it.done ? ' on' : ''), 'data-nodrag': 1, onclick: (e) => { e.stopPropagation(); completeTask(it.ref, !it.done, e.currentTarget); } }, ic('check', 11)) : null,
         h('div', { class: 'blk-text' }, h('b', null, it.title), !small && mode === 'day' ? h('span', null, `${fromMin(it.startMin)} – ${fromMin(it.endMin)}${it.type === 'event' && it.ref.location ? ' · ' + it.ref.location : ''}`) : null));
@@ -320,7 +320,7 @@ function itemRow(it, date) {
   if (t === 'goal') { time = 'срок'; sub = 'Дедлайн цели'; }
   else if (t === 'event') { const e = it.ref; time = e.allDay || !e.start ? 'весь день' : `${e.start}`; sub = e.allDay ? (e.endDate ? `до ${fmtDayMonth(e.endDate)}` : '') : `${e.start}–${e.end || ''}`; if (e.location) sub += (sub ? ' · ' : '') + e.location; }
   else { time = it.ref.time || 'задача'; sub = it.ref.time ? '' : 'Без времени'; }
-  const click = t === 'goal' ? () => openGoalDetail(it.id) : t === 'event' ? () => (it.ref.externalReadOnly ? openExternalEventDetails(it.ref) : editEvent(it.ref, {}, date)) : () => editTask(it.ref);
+  const click = t === 'goal' ? () => openGoalDetail(it.id) : t === 'event' ? () => (it.ref.externalReadOnly ? openExternalEventDetails({ ...it.ref, date: it.date }) : editEvent(it.ref, {}, date)) : () => editTask(it.ref);
   return h('div', { class: 'ag-item' + (it.done ? ' done' : '') + (t === 'task' && isTaskExitStarted(it.id) ? ' task-completion-exit' : ''), ...(t === 'task' ? { 'data-task-id': it.id, 'data-task-done': it.done ? 'true' : 'false' } : {}), style: { '--c': cv(it.color) }, onclick: click },
     h('div', { class: 'ai-time' }, time), h('i', { class: 'ai-bar' }),
     h('div', { class: 'ai-main' }, h('b', null, it.title), sub ? h('span', null, sub) : null),
@@ -355,7 +355,7 @@ function dayView(date, data) {
       h('span', { class: 'allday-label' }, 'весь день'),
       h('div', { class: 'allday-items' }, [
         ...it.deadlines.map((d) => h('button', { class: 'ad-chip', style: { '--c': cv(d.color) }, onclick: () => openGoalDetail(d.id) }, '🎯 ' + d.title)),
-        ...it.allDay.map((a) => h('button', { class: 'ad-chip' + (a.ref.externalReadOnly ? ' external-event' : ''), style: { '--c': cv(a.color) }, onclick: () => (a.ref.externalReadOnly ? openExternalEventDetails(a.ref) : editEvent(a.ref, {}, date)) }, a.title)),
+        ...it.allDay.map((a) => h('button', { class: 'ad-chip' + (a.ref.externalReadOnly ? ' external-event' : ''), style: { '--c': cv(a.color) }, onclick: () => (a.ref.externalReadOnly ? openExternalEventDetails({ ...a.ref, date: a.date }) : editEvent(a.ref, {}, date)) }, a.title)),
       ])));
   }
 
