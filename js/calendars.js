@@ -159,7 +159,10 @@ export function openCalendarManager(onFilters, onSelectCalendar) {
         h('button', {
           type: 'button',
           class: 'row-btn',
-          onclick: () => openExternalCalendarManager(draw, onSelectCalendar),
+          onclick: () => openExternalCalendarManager(draw, (id) => {
+            if (onSelectCalendar) onSelectCalendar(id);
+            api.close(true);
+          }),
         }, ic('cloud', 17), 'Внешние календари Google'),
         h('button', { type: 'button', class: 'row-btn', onclick: () => openCalendarIcsImport(activeId || DEFAULT_CALENDAR_ID, draw) }, ic('inbox', 17), 'Импортировать .ics'),
         h('button', { type: 'button', class: 'row-btn', onclick: () => {
