@@ -466,7 +466,7 @@ test('iCalendar импортирует изменённые и отменённ�
     'RECURRENCE-ID:20261126T100000', 'STATUS:CANCELLED',
     'DTSTART:20261126T100000', 'DTEND:20261126T110000', 'SUMMARY:Cancelled',
     'END:VEVENT', 'END:VCALENDAR',
-  ].join('\\r\\n');
+  ].join('\r\n');
   const parsed = parseCalendarICS(source);
   assert.equal(parsed.events.length, 2);
   const series = parsed.events.find((event) => event.icsUid === 'series@example.test');
@@ -477,7 +477,7 @@ test('iCalendar импортирует изменённые и отменённ�
   assert.equal(moved.end, '13:00');
   assert.equal(moved.repeat.freq, 'none');
   assert.equal(moved.notes, 'New time and date');
-  assert.match(moved.icsUid, /^series@example\\.test#RITM-OVERRIDE-/);
+  assert.ok(moved.icsUid.startsWith('series@example.test#RITM-OVERRIDE-'));
   assert.ok(!parsed.warnings.some((warning) => warning.includes('отдельное вхождение') && warning.includes('пропущено')));
 });
 
@@ -491,7 +491,7 @@ test('iCalendar не применяет неполное изменение се
     'RECURRENCE-ID;RANGE=THISANDFUTURE:20261124T100000',
     'DTSTART:20261124T120000', 'DTEND:20261124T130000', 'SUMMARY:Moved forward',
     'END:VEVENT', 'END:VCALENDAR',
-  ].join('\\r\\n');
+  ].join('\r\n');
   const parsed = parseCalendarICS(source);
   assert.equal(parsed.events.length, 1);
   assert.deepEqual(parsed.events[0].exdates, []);
