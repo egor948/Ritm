@@ -429,6 +429,29 @@ test('iCalendar экспорт и повторный импорт сохраня
   assert.deepEqual(result.reminders.map((item) => [item.amount, item.unit]), [[2, 'hours']]);
 });
 
+test('iCalendar принимает WKST для простых недельных и ежедневных повторений', () => {
+  const source = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    'BEGIN:VEVENT', 'UID:weekly-wkst@example.test',
+    'DTSTART;TZID=Europe/Minsk:20230716T170000',
+    'DTEND;TZID=Europe/Minsk:20230716T174500',
+    'RRULE:FREQ=WEEKLY;WKST=TU;UNTIL=20230902T205959Z',
+    'SUMMARY:Тренировка', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:daily-wkst@example.test',
+    'DTSTART;TZID=Europe/Minsk:20231213T223000',
+    'DTEND;TZID=Europe/Minsk:20231213T224000',
+    'RRULE:FREQ=DAILY;WKST=TU;UNTIL=20231220T205959Z',
+    'SUMMARY:Привычка', 'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\\r\\n');
+  const parsed = parseCalendarICS(source);
+  assert.equal(parsed.events.length, 2);
+  assert.equal(parsed.events[0].repeat.freq, 'weekly');
+  assert.equal(parsed.events[0].repeat.until, '2023-09-02');
+  assert.equal(parsed.events[1].repeat.freq, 'daily');
+  assert.ok(!parsed.warnings.some((warning) => warning.includes('сложного правила')));
+});
+
 test('iCalendar предупреждает о неподдерживаемых отдельных изменениях повторения', () => {
   const source = [
     'BEGIN:VCALENDAR', 'VERSION:2.0',
