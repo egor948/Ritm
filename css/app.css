@@ -1124,8 +1124,8 @@ small { font-size: 12px; }
   border-radius: 6px; background: var(--fill); color: var(--label-2);
   font-style: normal; font-size: 10px; line-height: 1;
 }
-.habit-month-day.full { color: #fff; background: var(--c-green); font-weight: 700; }
-.habit-month-day.part { color: var(--label); background: color-mix(in srgb, var(--c-green) calc(var(--v, .35) * 100%), var(--fill)); }
+.habit-month-day.full { color: #fff; background: var(--c); font-weight: 700; }
+.habit-month-day.part { color: var(--label); background: color-mix(in srgb, var(--c) calc(var(--v, .35) * 100%), var(--fill)); }
 .habit-month-day.today { outline: 1.5px solid var(--accent); outline-offset: 1px; }
 .habit-month-day.future { opacity: .25; }
 .habit-month-day.blank { background: transparent; }
