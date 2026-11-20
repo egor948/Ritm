@@ -383,6 +383,20 @@ test('iCalendar импортирует события, повторы, искл�
   assert.equal(holiday.endDate, '2026-12-26');
 });
 
+test('iCalendar корректно считает COUNT для BYDAY, когда DTSTART не совпадает с днём повтора', () => {
+  const source = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    'BEGIN:VEVENT', 'UID:sunday-series@example.test',
+    'DTSTART:20261128T100000', 'DTEND:20261128T110000', 'SUMMARY:Sunday series',
+    'RRULE:FREQ=WEEKLY;BYDAY=SU;COUNT=2',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].join('\\r\\n');
+  const parsed = parseCalendarICS(source);
+  const event = parsed.events[0];
+  assert.equal(event.repeat.until, '2026-12-06');
+  assert.ok(parsed.warnings.some((warning) => warning.includes('не входит в BYDAY')));
+});
+
 test('iCalendar экспорт и повторный импорт сохраняют UID, цвет, повторение и напоминания', () => {
   const event = {
     id: 'event-roundtrip',
