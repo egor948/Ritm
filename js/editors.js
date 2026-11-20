@@ -31,11 +31,15 @@ function editorShell({ title, draft, draw, onSave, onDelete, deleteLabel = 'Уд
     build(api) {
       const redraw = () => {
         const scroll = captureScrollPosition(api.body);
+        // Prevent the sheet's generic observer from restoring a stale position
+        // while the editor replaces controls after a segmented selection.
+        api.body.dataset.scrollMode = 'free';
         clear(api.body);
         draw(api.body, draft, redraw, api);
         if (onDelete) api.body.appendChild(h('div', { class: 'group' }, h('button', { class: 'row-btn danger', onclick: () => onDelete(api) }, deleteLabel)));
         api.body.appendChild(h('div', { class: 'sheet-pad' }));
         restoreScrollPosition(api.body, scroll);
+        requestAnimationFrame(() => requestAnimationFrame(() => { if (api.body.isConnected) delete api.body.dataset.scrollMode; }));
       };
       redraw();
     },
@@ -173,6 +177,7 @@ export function editTask(task, defaults = {}) {
   delete draft.duration;
   const originalDate = task ? (task.date || null) : null;
   let dateWasChanged = false;
+  let selectedDatePreset = draft.date === todayStr() ? 'today' : draft.date === addDays(todayStr(), 1) ? 'tomorrow' : draft.date === addDays(todayStr(), 7) ? 'week' : !draft.date ? 'none' : null;
   draft.reminders = (draft.reminders || []).map((r) => ({ ...r, id: r.id || uid() }));
   const originalReminders = reminderSnapshot(draft.reminders);
   const goalMode = () => { const g = data.goals.find((x) => x.id === draft.goalId); if (!g) return null; const p = g.parentId && data.goals.find((x) => x.id === g.parentId); return (p && (p.progressMode === 'weight' || g.progressMode === 'weight')) || g.progressMode === 'weight' ? 'weight' : null; };
@@ -204,7 +209,8 @@ export function editTask(task, defaults = {}) {
         }
         dateWasChanged = true;
         d.date = v;
-        taskTimeRow.style.display = d.date ? '' : 'none';
+        selectedDatePreset = null;
+        redraw();
       }, { min: todayStr() });
       const taskTimeRow = row('Время', timeInput(d.time, (v) => { d.time = v; }), { icon: 'clock', iconColor: 'blue' });
       taskTimeRow.style.display = d.date ? '' : 'none';
@@ -218,8 +224,8 @@ export function editTask(task, defaults = {}) {
         group(
           h('div', { class: 'row' }, pills({
             options: [{ v: 'today', label: 'Сегодня' }, { v: 'tomorrow', label: 'Завтра' }, { v: 'week', label: 'Через неделю' }, { v: 'none', label: 'Без даты' }],
-            value: d.date === todayStr() ? 'today' : d.date === addDays(todayStr(), 1) ? 'tomorrow' : d.date === addDays(todayStr(), 7) ? 'week' : !d.date ? 'none' : null,
-            onChange: (v) => { const nextDate = v === 'today' ? todayStr() : v === 'tomorrow' ? addDays(todayStr(), 1) : v === 'week' ? addDays(todayStr(), 7) : null; if (changedDateIsPast(nextDate, originalDate, true)) { toast('Нельзя назначить задачу на прошедшую дату'); return; } dateWasChanged = true; d.date = nextDate; redraw(); },
+            value: selectedDatePreset,
+            onChange: (v) => { const nextDate = v === 'today' ? todayStr() : v === 'tomorrow' ? addDays(todayStr(), 1) : v === 'week' ? addDays(todayStr(), 7) : null; if (changedDateIsPast(nextDate, originalDate, true)) { toast('Нельзя назначить задачу на прошедшую дату'); return; } dateWasChanged = true; selectedDatePreset = v; d.date = nextDate; redraw(); },
           })),
           row('Дата', taskDateControl, { icon: 'calendar', iconColor: 'red' }),
           taskTimeRow,
@@ -510,7 +516,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
           row('Повтор', selectInput(Object.entries(REPEAT_LABELS).map(([v, label]) => ({ v, label })), r.freq || 'none', (v) => { r.freq = v; if (v === 'weekly' && (!r.days || !r.days.length)) r.days = []; redraw(); }), { icon: 'repeat', iconColor: 'green' }),
           r.freq === 'weekly' ? h('div', { class: 'row' }, pills({ multi: true, options: WEEK_ORDER.map((n) => ({ v: n, label: WD_SHORT[n] })), value: r.days && r.days.length ? r.days : [new Date(d.date + 'T00:00').getDay()], onChange: (v) => (r.days = v) })) : null,
           r.freq && r.freq !== 'none' ? row('Каждые', stepper(r.interval || 1, (v) => (r.interval = v), { min: 1, max: 30, format: (v) => `${v} ${r.freq === 'daily' ? plural(v, ['день', 'дня', 'дней']) : r.freq === 'weekly' ? plural(v, ['неделю', 'недели', 'недель']) : r.freq === 'monthly' ? plural(v, ['месяц', 'месяца', 'месяцев']) : plural(v, ['год', 'года', 'лет'])}` })) : null,
-          r.freq && r.freq !== 'none' ? row('Повторять до', dateInput(r.until, (v) => (r.until = v))) : null,
+          r.freq && r.freq !== 'none' ? row('Повторять до', dateInput(r.until, (v) => (r.until = v), { closeOnClear: true })) : null,
           ),
         groupTitle('Напоминания'),
         eventRemindersGroup(d),
@@ -623,7 +629,7 @@ export function editGoal(goal, defaults = {}) {
         ] : null,
         groupTitle('Как считать прогресс'),
         group(h('div', { class: 'row' }, seg({ options: [{ v: 'tasks', label: 'По задачам' }, { v: 'weight', label: 'По весу' }, { v: 'metric', label: 'Метрика' }], value: d.progressMode || 'tasks', onChange: (v) => { d.progressMode = v; redraw(); } }))),
-        h('div', { class: 'group-note' }, d.progressMode === 'metric' ? 'Прогресс — это движение от начального значения к целевому, например «пробежать 150 км» или «похудеть с 90 до 80 кг».' : d.progressMode === 'weight' ? 'Каждая задача имеет вес (1–10). Выполнение тяжёлых задач двигает цель сильнее.' : 'Прогресс — доля выполненных задач цели и её подцелей.'),
+        h('div', { class: 'group-note' }, d.progressMode === 'metric' ? 'Укажите начальное значение, текущий результат и цель. Ритм покажет, какую часть пути вы уже прошли. Например: пробежать от 0 до 150 км или изменить вес с 90 до 80 кг.' : d.progressMode === 'weight' ? 'Задачам можно назначить важность от 1 до 10. Выполнение важной задачи с весом 10 продвинет цель сильнее, чем небольшой задачи с весом 1. Выбирайте этот способ, если шаги имеют разную значимость.' : 'Ритм считает долю выполненных задач цели и её подцелей. Например, если из 10 шагов выполнены 4, прогресс составит 40%. Подходит, когда все шаги одинаково важны.'),
         d.progressMode === 'metric' ? group(
           row('Начальное значение', numberInput(m.start, (v) => (m.start = v), { width: '110px' })),
           row('Сейчас', numberInput(m.current, (v) => (m.current = v), { width: '110px' })),
@@ -657,7 +663,7 @@ export function quickAdd({ date = null } = {}) {
       const tile = (icon, color, label, sub, fn) => h('button', { class: 'tile', style: { '--c': cv(color) }, onclick: () => { api.close(true); setTimeout(fn, 120); } }, h('span', { class: 'tile-ic' }, ic(icon, 24)), h('b', null, label), h('small', null, sub));
       api.body.append(
         group(h('div', { class: 'row solo' }, input)),
-        h('div', { class: 'quick-when' }, pills({ options: [{ v: 'today', label: 'Сегодня' }, { v: 'tomorrow', label: 'Завтра' }, { v: 'none', label: 'Во входящие' }], value: null, onChange: add })),
+        h('div', { class: 'quick-when' }, pills({ options: [{ v: 'today', label: 'Сегодня' }, { v: 'tomorrow', label: 'Завтра' }, { v: 'none', label: 'Без даты' }], value: null, onChange: add })),
         h('div', { class: 'tiles' },
           tile('list', 'blue', 'Задача', 'с датой, целью и чек-листом', () => editTask(null, date ? { date } : {})),
           tile('calendar', 'red', 'Событие', 'встреча, поездка, повтор', () => editEvent(null, date ? { date } : {})),
