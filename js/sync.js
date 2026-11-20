@@ -272,6 +272,28 @@ async function rest(path, { method = 'GET', body, prefer } = {}) {
 }
 export const restCall = rest;
 
+/** Вызов авторизованной Supabase Edge Function с текущей сессией Ritm. */
+export async function invokeFunction(name, body = {}) {
+  if (!configured()) throw new Error('Сервер не настроен');
+  if (!session) throw new Error('Войдите в аккаунт');
+  const safeName = String(name || '').trim();
+  if (!/^[a-z0-9-]{1,64}$/i.test(safeName)) throw new Error('Некорректное имя серверной функции');
+  const access = await token();
+  const res = await fetch(`${base()}/functions/v1/${safeName}`, {
+    method: 'POST',
+    headers: headers(access),
+    body: JSON.stringify(body || {}),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(json.error || json.message || `Сервер ответил ${res.status}`);
+    error.payload = json;
+    error.status = res.status;
+    throw error;
+  }
+  return json;
+}
+
 const PAGE = 500;
 async function pull() {
   let cursor = S.syncMeta().cursor || 0;
