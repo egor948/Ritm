@@ -230,7 +230,7 @@ function parseRule(value, start, warnings, summary) {
     const parsed = parseIcsDate(fields.UNTIL, {}, warnings);
     until = parsed && parsed.date;
   }
-  return { freq, interval, days, until };
+  return { freq, interval, ...(days.length ? { days } : {}), until };
 }
 
 function parseEvents(text) {
