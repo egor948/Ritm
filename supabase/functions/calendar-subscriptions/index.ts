@@ -69,7 +69,7 @@ async function authenticate(req: Request) {
   return { userId: user.id, admin };
 }
 
-async function syncRow(admin: ReturnType<typeof createClient>, row: SubscriptionRow) {
+async function syncRow(admin: any, row: SubscriptionRow) {
   try {
     const sourceUrl = await decryptCalendarUrl(row.encrypted_url, row.url_iv);
     const result = await fetchCalendarIcs(sourceUrl, { etag: row.etag, lastModified: row.last_modified });
