@@ -367,15 +367,15 @@ test('iCalendar импортирует события, повторы, искл�
     'SUMMARY:Holiday',
     'END:VEVENT',
     'END:VCALENDAR',
-  ].join('\\r\\n');
+  ].join('\r\n');
   const parsed = parseCalendarICS(source);
   assert.equal(parsed.events.length, 2);
   const meeting = parsed.events.find((event) => event.icsUid === 'weekly-meeting@example.test');
   assert.equal(meeting.title, 'Meeting, planning');
-  assert.equal(meeting.notes, 'Line one\\nLine two');
+  assert.equal(meeting.notes, 'Line one\nLine two');
   assert.equal(meeting.start, '10:00');
   assert.equal(meeting.end, '11:00');
-  assert.deepEqual(meeting.repeat, { freq: 'weekly', interval: 2, days: [1, 3], until: '2026-12-02' });
+  assert.deepEqual(meeting.repeat, { freq: 'weekly', interval: 2, days: [1, 3], until: '2026-12-09' });
   assert.deepEqual(meeting.exdates, ['2026-11-25']);
   assert.deepEqual(meeting.reminders.map((item) => [item.amount, item.unit]), [[15, 'minutes']]);
   const holiday = parsed.events.find((event) => event.icsUid === 'holiday@example.test');
@@ -393,7 +393,7 @@ test('iCalendar экспорт и повторный импорт сохраня
     end: '19:30',
     allDay: false,
     location: 'Дом; зал',
-    notes: 'Первая строка\\nВторая строка',
+    notes: 'Первая строка\nВторая строка',
     color: 'pink',
     colorOverride: true,
     repeat: { freq: 'yearly', interval: 1, until: '2030-12-24' },
@@ -425,7 +425,7 @@ test('iCalendar предупреждает о неподдерживаемых �
     'RECURRENCE-ID:20261124T100000',
     'DTSTART:20261124T120000', 'DTEND:20261124T130000', 'SUMMARY:Moved',
     'END:VEVENT', 'END:VCALENDAR',
-  ].join('\\r\\n');
+  ].join('\r\n');
   const parsed = parseCalendarICS(source);
   assert.equal(parsed.events.length, 1);
   assert.equal(parsed.events[0].title, 'Series');
