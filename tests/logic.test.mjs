@@ -443,7 +443,7 @@ test('iCalendar принимает WKST для простых недельных
     'RRULE:FREQ=DAILY;WKST=TU;UNTIL=20231220T205959Z',
     'SUMMARY:Привычка', 'END:VEVENT',
     'END:VCALENDAR',
-  ].join('\\r\\n');
+  ].join('\r\n');
   const parsed = parseCalendarICS(source);
   assert.equal(parsed.events.length, 2);
   assert.equal(parsed.events[0].repeat.freq, 'weekly');
