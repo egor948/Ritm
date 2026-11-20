@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as L from '../js/logic.js';
 import * as U from '../js/util.js';
+import { parseCalendarICS, buildCalendarICS } from '../js/calendar-ics.js';
 import { filterCalendarEvents, DEFAULT_CALENDAR_ID } from '../js/calendars.js';
 import * as Store from '../js/store.js';
 
@@ -344,4 +345,89 @@ test('цвет событий наследуется от календаря, а
   const items = L.dayItems(data, T);
   assert.equal(items.timed.find((item) => item.id === 'inherited').color, 'pink');
   assert.equal(items.timed.find((item) => item.id === 'custom').color, 'orange');
+});
+
+test('iCalendar импортирует события, повторы, исключения, напоминания и события на весь день', () => {
+  const source = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    'BEGIN:VEVENT',
+    'UID:weekly-meeting@example.test',
+    'DTSTART:20261123T100000',
+    'DTEND:20261123T110000',
+    'SUMMARY:Meeting\\, planning',
+    'DESCRIPTION:Line one\\nLine two',
+    'RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=4',
+    'EXDATE:20261125T100000',
+    'BEGIN:VALARM', 'ACTION:DISPLAY', 'TRIGGER:-PT15M', 'END:VALARM',
+    'END:VEVENT',
+    'BEGIN:VEVENT',
+    'UID:holiday@example.test',
+    'DTSTART;VALUE=DATE:20261224',
+    'DTEND;VALUE=DATE:20261227',
+    'SUMMARY:Holiday',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\\r\\n');
+  const parsed = parseCalendarICS(source);
+  assert.equal(parsed.events.length, 2);
+  const meeting = parsed.events.find((event) => event.icsUid === 'weekly-meeting@example.test');
+  assert.equal(meeting.title, 'Meeting, planning');
+  assert.equal(meeting.notes, 'Line one\\nLine two');
+  assert.equal(meeting.start, '10:00');
+  assert.equal(meeting.end, '11:00');
+  assert.deepEqual(meeting.repeat, { freq: 'weekly', interval: 2, days: [1, 3], until: '2026-12-02' });
+  assert.deepEqual(meeting.exdates, ['2026-11-25']);
+  assert.deepEqual(meeting.reminders.map((item) => [item.amount, item.unit]), [[15, 'minutes']]);
+  const holiday = parsed.events.find((event) => event.icsUid === 'holiday@example.test');
+  assert.equal(holiday.allDay, true);
+  assert.equal(holiday.endDate, '2026-12-26');
+});
+
+test('iCalendar экспорт и повторный импорт сохраняют UID, цвет, повторение и напоминания', () => {
+  const event = {
+    id: 'event-roundtrip',
+    icsUid: 'roundtrip@example.test',
+    title: 'Праздник, вместе',
+    date: '2026-12-24',
+    start: '18:30',
+    end: '19:30',
+    allDay: false,
+    location: 'Дом; зал',
+    notes: 'Первая строка\\nВторая строка',
+    color: 'pink',
+    colorOverride: true,
+    repeat: { freq: 'yearly', interval: 1, until: '2030-12-24' },
+    exdates: ['2027-12-24'],
+    reminders: [{ id: 'rem-1', amount: 2, unit: 'hours' }],
+  };
+  const content = buildCalendarICS({ name: 'Праздники' }, [event]);
+  const parsed = parseCalendarICS(content);
+  assert.equal(parsed.events.length, 1);
+  const result = parsed.events[0];
+  assert.equal(result.icsUid, event.icsUid);
+  assert.equal(result.title, event.title);
+  assert.equal(result.location, event.location);
+  assert.equal(result.notes, event.notes);
+  assert.equal(result.color, 'pink');
+  assert.equal(result.colorOverride, true);
+  assert.deepEqual(result.repeat, event.repeat);
+  assert.deepEqual(result.exdates, event.exdates);
+  assert.deepEqual(result.reminders.map((item) => [item.amount, item.unit]), [[2, 'hours']]);
+});
+
+test('iCalendar предупреждает о неподдерживаемых отдельных изменениях повторения', () => {
+  const source = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    'BEGIN:VEVENT', 'UID:series@example.test',
+    'DTSTART:20261123T100000', 'DTEND:20261123T110000', 'SUMMARY:Series',
+    'RRULE:FREQ=DAILY;COUNT=3', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:series@example.test',
+    'RECURRENCE-ID:20261124T100000',
+    'DTSTART:20261124T120000', 'DTEND:20261124T130000', 'SUMMARY:Moved',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].join('\\r\\n');
+  const parsed = parseCalendarICS(source);
+  assert.equal(parsed.events.length, 1);
+  assert.equal(parsed.events[0].title, 'Series');
+  assert.ok(parsed.warnings.some((warning) => warning.includes('отдельное вхождение')));
 });
