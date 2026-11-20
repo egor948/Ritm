@@ -21,7 +21,7 @@ function safeFileName(value) {
 
 export function exportCalendarIcs(calendar, events) {
   const content = buildCalendarICS(calendar, events);
-  const blob = new Blob(['\uFEFF', content], { type: 'text/calendar;charset=utf-8' });
+  const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
