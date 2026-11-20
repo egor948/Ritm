@@ -2,6 +2,7 @@
 import { h, uid, clear, COLOR_KEYS, plural } from './util.js';
 import * as S from './store.js';
 import { openSheet, actionSheet, group, groupTitle, groupNote, row, toggle, textInput, colorPicker, toast, ic, cv } from './ui.js';
+import { openCalendarIcsImport, exportCalendarIcs } from './calendar-ics-ui.js';
 
 export const DEFAULT_CALENDAR_ID = S.DEFAULT_CALENDAR_ID;
 
@@ -131,6 +132,7 @@ export function openCalendarManager(onFilters, onSelectCalendar) {
             h('b', null, calendar.name || 'Без названия'),
             h('small', null, `${count} ${plural(count, ['событие', 'события', 'событий'])} · ${calendar.visible === false ? 'Скрыт' : 'Показывается'}`)),
           selected ? h('span', { class: 'calendar-selected-mark' }, ic('check', 16)) : null),
+        h('button', { type: 'button', class: 'calendar-manage-export', 'aria-label': `Экспортировать ${calendar.name || 'календарь'}`, disabled: count === 0, onclick: () => exportCalendar(calendar) }, ic('down', 17)),
         h('button', { type: 'button', class: 'calendar-manage-edit', 'aria-label': 'Настроить календарь', onclick: () => openCalendarEditor(calendar, draw) }, ic('edit', 17)),
         (() => {
           const control = toggle(calendar.visible !== false, (visible) => {
@@ -145,7 +147,20 @@ export function openCalendarManager(onFilters, onSelectCalendar) {
         })(),
       );
     });
+    const exportCalendar = (calendar) => {
+      const events = S.data().events.filter((event) => eventCalendarId(event) === calendar.id);
+      if (!events.length) { toast('В этом календаре пока нет событий'); return; }
+      exportCalendarIcs(calendar, events);
+    };
     api.body.append(
+      group(
+        h('button', { type: 'button', class: 'row-btn', onclick: () => openCalendarIcsImport(activeId || DEFAULT_CALENDAR_ID, draw) }, ic('inbox', 17), 'Импортировать .ics'),
+        h('button', { type: 'button', class: 'row-btn', onclick: () => {
+          const data = S.data();
+          if (!data.events.length) { toast('Пока нечего экспортировать'); return; }
+          exportCalendarIcs({ name: 'Все календари Ritm' }, data.events);
+        } }, ic('down', 17), 'Экспортировать всё'),
+      ),
       h('button', {
         type: 'button',
         class: 'calendar-show-all' + (!activeId ? ' selected' : ''),
