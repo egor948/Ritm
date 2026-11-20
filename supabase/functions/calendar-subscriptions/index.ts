@@ -118,7 +118,13 @@ Deno.serve(async (req) => {
     if (action === 'add') {
       const name = String(body.name || '').trim().slice(0, 60);
       if (!name) return json({ error: 'Укажите название календаря.' }, 400);
-      const sourceUrl = validateGoogleCalendarUrl(body.url);
+      let sourceUrl: string;
+      try { sourceUrl = validateGoogleCalendarUrl(body.url); }
+      catch (error) { return json({ error: cleanError(error) }, 400); }
+      const { count, error: countError } = await admin.from('calendar_subscriptions')
+        .select('id', { count: 'exact', head: true }).eq('user_id', userId);
+      if (countError) throw new Error('Не удалось проверить количество подписок.');
+      if ((count ?? 0) >= 20) return json({ error: 'Можно добавить не более 20 внешних календарей.' }, 400);
       const color = colors.has(String(body.color)) ? String(body.color) : 'blue';
       const encrypted = await encryptCalendarUrl(sourceUrl);
       const id = crypto.randomUUID();
