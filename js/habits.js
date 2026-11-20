@@ -120,6 +120,23 @@ export function heatmap(hb, data, weeks = 12) {
   return grid;
 }
 
+function habitMonthGrid(x, data, first) {
+  const lead = (parseYmd(first).getDay() - S.settings().weekStart + 7) % 7;
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push(h('i', { class: 'habit-month-day blank', 'aria-hidden': 'true' }));
+  for (let day = 1; day <= daysInMonth(first); day++) {
+    const date = first.slice(0, 8) + pad(day);
+    const future = date > todayStr();
+    const value = future ? null : habitCell(x, data.idx, date);
+    cells.push(h('i', {
+      class: 'habit-month-day' + (future ? ' future' : value == null ? ' off' : value >= 1 ? ' full' : value > 0 ? ' part' : ' zero') + (date === todayStr() ? ' today' : ''),
+      style: value != null && value > 0 && value < 1 ? { '--v': 0.2 + value * 0.65 } : null,
+      title: date,
+    }, day));
+  }
+  return h('div', { class: 'habit-month-grid', 'aria-label': 'История привычки за ' + first.slice(0, 7) }, cells);
+}
+
 function habitCard(x, data, i) {
   const st = habitStreaks(x, data.idx, todayStr(), S.settings().weekStart);
   const rate = habitRate(x, data.idx, todayStr(), 30, S.settings().weekStart);
@@ -129,7 +146,7 @@ function habitCard(x, data, i) {
       h('div', { class: 'hm-emoji', style: { '--c': cv(x.color || 'green') } }, x.emoji || '•'),
       h('div', { class: 'hc-title' }, h('b', null, x.title), h('span', null, scheduleText(x), gl ? ` · ${gl.emoji || '🎯'} ${gl.title}` : '')),
       st.current ? h('span', { class: 'streak-badge' }, ic('flame', 14), streakText(st)) : null),
-    heatmap(x, data),
+    habitMonthGrid(x, data, monthStart(todayStr())),
     h('div', { class: 'hc-stats' },
       h('span', null, h('b', null, st.best), ` ${st.unit === 'week' ? 'нед.' : 'дн.'} лучшая`),
       h('span', null, h('b', null, rate == null ? '—' : Math.round(rate * 100) + '%'), ' за 30 дней')));
@@ -174,7 +191,6 @@ export function openHabitDetail(id) {
             statBox(total, plural(total, ['раз', 'раза', 'раз']) + ' всего'))),
         gl ? h('button', { class: 'card goal-link pressable', onclick: () => openGoalDetail(gl.id) }, h('span', { class: 'hm-emoji sm', style: { '--c': cv(gl.color || 'blue') } }, gl.emoji || '🎯'), h('div', null, h('small', null, 'Привязана к цели'), h('b', null, gl.title)), ic('chevR', 18)) : null,
         h('div', { class: 'sec-head' }, h('h3', null, 'История')),
-        h('div', { class: 'card pad' }, heatmap(x, data, 14)),
         monthCard(x, data, api),
         h('div', { class: 'pad-bottom' }),
       ];
@@ -210,7 +226,7 @@ function monthCard(x, data, api) {
     h('div', { class: 'mc-head' },
       h('button', { class: 'icon-btn', 'aria-label': 'Предыдущий месяц', onclick: () => { detailMonth = addMonths(first, -1); api.refresh(); } }, ic('chevL', 20)),
       h('b', null, `${MONTHS_NOM[parseYmd(first).getMonth()]} ${first.slice(0, 4)}`),
-      h('button', { class: 'icon-btn', 'aria-label': 'Следующий месяц', onclick: () => { detailMonth = addMonths(first, 1); api.refresh(); }, disabled: first >= monthStart(today) }, ic('chevR', 20))),
+      h('button', { class: 'icon-btn', 'aria-label': 'Следующий месяц', onclick: () => { detailMonth = addMonths(first, 1); api.refresh(); }, disabled: first >= addMonths(monthStart(today), 1) }, ic('chevR', 20))),
     h('div', { class: 'mc-wd' }, wd.map((w) => h('span', null, w))),
     h('div', { class: 'mc-grid' }, cells),
     h('div', { class: 'hint tight center' }, x.type === 'check' ? 'Нажмите на день, чтобы отметить или снять отметку' : 'Нажмите на день, чтобы изменить значение'));
