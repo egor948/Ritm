@@ -167,7 +167,7 @@ function countUntil(start, freq, interval, days, count) {
       return addDays(weekStart(start, 1), (day + 6) % 7);
     }
     const remaining = count - firstWeek.length;
-    const activeWeek = 1 + Math.floor((remaining - 1) / sorted.length) * interval;
+    const activeWeek = (1 + Math.floor((remaining - 1) / sorted.length)) * interval;
     const day = sorted[(remaining - 1) % sorted.length];
     return addDays(weekStart(start, 1), activeWeek * 7 + (day + 6) % 7);
   }
