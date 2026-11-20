@@ -9,6 +9,7 @@ const state = { subscriptions: [], loading: false, error: '', loadedAt: 0, userI
 const listeners = new Set();
 const parseCache = new Map();
 let loadingPromise = null;
+let loadingUserId = null;
 let started = false;
 let sessionUserId = null;
 
@@ -54,6 +55,7 @@ export async function loadExternalSubscriptions(force = false) {
     state.subscriptions = [];
     state.userId = null;
     state.loadedAt = 0;
+    state.loading = false;
     state.error = '';
     changed();
     return [];
@@ -61,12 +63,12 @@ export async function loadExternalSubscriptions(force = false) {
   if (!force && state.userId === userId && state.loadedAt && Date.now() - state.loadedAt < 90000) {
     return state.subscriptions;
   }
-  if (loadingPromise) return loadingPromise;
+  if (loadingPromise && loadingUserId === userId) return loadingPromise;
 
   state.loading = true;
   state.error = '';
   emit();
-  loadingPromise = (async () => {
+  const promise = (async () => {
     try {
       const result = await request('list');
       if (sessionId() !== userId) return [];
@@ -79,12 +81,17 @@ export async function loadExternalSubscriptions(force = false) {
       if (sessionId() === userId) state.error = error.message || 'Не удалось загрузить внешние календари.';
       return state.subscriptions;
     } finally {
-      state.loading = false;
-      loadingPromise = null;
+      if (loadingPromise === promise) {
+        loadingPromise = null;
+        loadingUserId = null;
+        state.loading = false;
+      }
       emit();
     }
   })();
-  return loadingPromise;
+  loadingPromise = promise;
+  loadingUserId = userId;
+  return promise;
 }
 
 export function startExternalCalendars() {
@@ -99,6 +106,7 @@ export function startExternalCalendars() {
     state.subscriptions = [];
     state.userId = nextUserId;
     state.loadedAt = 0;
+    state.loading = false;
     state.error = '';
     parseCache.clear();
     changed();
@@ -181,14 +189,21 @@ function shortSyncTime(value) {
 }
 
 function selectExternalCalendar(subscription, managerApi, onSelectCalendar) {
-  const id = externalCalendarId(subscription.id);
-  S.setSettings({
-    calFilters: { ...(S.settings().calFilters || {}), calendarId: id },
-    calView: 'agenda',
-  });
-  if (onSelectCalendar) onSelectCalendar(id);
-  managerApi.close(true);
-  changed();
+  const select = () => {
+    const id = externalCalendarId(subscription.id);
+    S.setSettings({
+      calFilters: { ...(S.settings().calFilters || {}), calendarId: id },
+      calView: 'agenda',
+    });
+    if (onSelectCalendar) onSelectCalendar(id);
+    managerApi.close(true);
+    changed();
+  };
+  if (subscription.visible === false) {
+    updateSubscription(subscription.id, { visible: true }).then((ok) => { if (ok) select(); });
+    return;
+  }
+  select();
 }
 
 async function refreshSubscription(id) {
@@ -397,7 +412,12 @@ export function openExternalCalendarManager(onChanged, onSelectCalendar) {
         (() => {
           const control = toggle(subscription.visible !== false, (visible) => {
             updateSubscription(subscription.id, { visible }).then((ok) => {
-              if (ok) { draw(); if (onChanged) onChanged(); }
+              if (!ok) return;
+              if (!visible && S.settings().calFilters?.calendarId === externalCalendarId(subscription.id)) {
+                S.setSettings({ calFilters: { ...(S.settings().calFilters || {}), calendarId: null } });
+              }
+              draw();
+              if (onChanged) onChanged();
             });
           });
           control.setAttribute('aria-label', 'Показывать календарь ' + (subscription.name || ''));
