@@ -16,6 +16,7 @@ const ICONS = {
   sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/>',
   filter: '<path d="M4 6h16M7 12h10M10 18h4"/>',
   check: '<path d="M5 12.8l4.4 4.4L19 7.4"/>',
+  'check-square': '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12.2l2.6 2.6L16.5 9"/>',
   x: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
   trash: '<path d="M4.5 7h15M9.5 7V4.8h5V7M6.8 7l.8 12.2h8.8L17.2 7M10 11v5M14 11v5"/>',
   clock: '<circle cx="12" cy="12" r="8.6"/><path d="M12 7.2V12l3.2 2"/>',
@@ -73,7 +74,7 @@ export function seg({ key, options, value, onChange, cls = '' }) {
   const idx = Math.max(0, options.findIndex((o) => o.v === currentValue));
   const prev = key != null && segPrev.has(key) ? segPrev.get(key) : idx;
   if (key != null) segPrev.set(key, idx);
-  const el = h('div', { class: 'seg ' + cls, style: { '--n': n, '--i': prev } },
+  const el = h('div', { class: 'seg ' + cls, 'data-no-scroll-restore': true, style: { '--n': n, '--i': prev } },
     h('div', { class: 'seg-thumb' }),
     options.map((o, i) => h('button', {
       type: 'button', class: 'seg-btn' + (i === idx ? ' on' : ''),
@@ -355,17 +356,21 @@ export function textInput({ value = '', placeholder = '', onInput, big = false, 
   if (autofocus) setTimeout(() => el.focus(), 420);
   return el;
 }
-export function dateInput(value, onChange, { clearable = true, min = null, max = null } = {}) {
+export function dateInput(value, onChange, { clearable = true, min = null, max = null, closeOnClear = false } = {}) {
   const inp = h('input', {
     class: 'inp dt',
     type: 'date',
     min,
     max,
-    onchange: (e) => onChange(e.target.value || null),
+    onchange: (e) => {
+      const next = e.target.value || null;
+      onChange(next);
+      if (closeOnClear && !next) e.target.blur();
+    },
   });
   inp.value = value || '';
   const wrap = h('div', { class: 'dt-wrap' }, inp,
-    clearable && value ? h('button', { type: 'button', class: 'mini-x', 'aria-label': 'Очистить', onclick: () => { inp.value = ''; onChange(null); wrap.querySelector('.mini-x').remove(); } }, ic('x', 14)) : null);
+    clearable && value ? h('button', { type: 'button', class: 'mini-x', 'aria-label': 'Очистить', onclick: () => { inp.value = ''; onChange(null); if (closeOnClear) inp.blur(); wrap.querySelector('.mini-x').remove(); } }, ic('x', 14)) : null);
   return wrap;
 }
 export function timeInput(value, onChange, { clearable = true } = {}) {
@@ -412,7 +417,7 @@ export function emojiPicker(value, onChange) {
 /** Ряд «пилюль» для выбора одного или нескольких значений. */
 export function pills({ options, value, multi = false, onChange, cls = '' }) {
   const sel = new Set(multi ? value || [] : [value]);
-  const el = h('div', { class: 'pills ' + cls }, options.map((o) => h('button', {
+  const el = h('div', { class: 'pills ' + cls, 'data-no-scroll-restore': true }, options.map((o) => h('button', {
     type: 'button', class: 'pill' + (sel.has(o.v) ? ' on' : ''), style: o.color ? { '--c': cv(o.color) } : null,
     onclick: (e) => {
       if (multi) { sel.has(o.v) ? sel.delete(o.v) : sel.add(o.v); e.currentTarget.classList.toggle('on'); onChange([...sel]); }
