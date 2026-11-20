@@ -1000,3 +1000,60 @@ small { font-size: 12px; }
     font-size: 15px;
   }
 }
+
+
+
+/* ---------- внешние календари Google ---------- */
+.external-calendar-intro {
+  display: flex; align-items: center; gap: 12px; padding: 14px 15px;
+}
+.external-calendar-intro-icon {
+  display: grid; place-items: center; flex: none; width: 42px; height: 42px;
+  border-radius: 13px; color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.external-calendar-intro > div:last-child,
+.external-calendar-copy {
+  display: flex; flex-direction: column; min-width: 0; gap: 4px;
+}
+.external-calendar-intro b { font-size: 14px; font-weight: 650; }
+.external-calendar-intro span { color: var(--label-2); font-size: 12px; line-height: 1.4; }
+.external-calendar-add {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  width: calc(100% - 8px); margin: 12px 4px; min-height: 48px;
+}
+.external-calendar-row {
+  display: flex; align-items: center; gap: 9px; min-height: 82px; padding: 10px 12px;
+}
+.external-calendar-open {
+  display: flex; align-items: center; gap: 11px; flex: 1; min-width: 0;
+  min-height: 54px; text-align: left; border-radius: 10px;
+}
+.external-calendar-open.selected .external-calendar-copy b { color: var(--accent); }
+.external-calendar-copy b {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 14px; font-weight: 650;
+}
+.external-calendar-copy small {
+  color: var(--label-2); font-size: 11.5px; line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.external-calendar-status.error { color: var(--c-red); }
+.external-calendar-updated { opacity: .8; }
+.external-calendar-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 22px 18px; color: var(--label-2); text-align: center;
+  font-size: 13px; line-height: 1.45;
+}
+.external-calendar-empty b { color: var(--label); font-size: 15px; }
+.external-calendar-error {
+  padding: 13px 15px; color: var(--c-red); font-size: 13px; line-height: 1.4;
+}
+.external-calendar-url-wrap { padding: 10px 14px; }
+.external-calendar-url { width: 100%; min-width: 0; font-size: 13px !important; }
+.external-event-notes {
+  padding: 4px 16px 14px; color: var(--label-2);
+  font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.external-event-calendar { color: var(--label); font-size: 14px; }
+.blk.external-event { outline: 1px dashed color-mix(in srgb, var(--c, var(--accent)) 65%, transparent); outline-offset: -2px; }
