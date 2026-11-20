@@ -106,3 +106,38 @@ end $;
 --     body    := '{}'::jsonb
 --   );
 -- $$);
+
+-- ---------------------------------------------------------------- внешние iCalendar-подписки (этап 1)
+-- URL источника хранится только в зашифрованном виде и доступен Edge Functions через service_role.
+create table if not exists public.calendar_subscriptions (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references auth.users(id) on delete cascade,
+  name           text not null check (char_length(name) between 1 and 60),
+  color          text not null default 'blue'
+                 check (color in ('blue','indigo','purple','pink','red','orange','yellow','green','mint','teal')),
+  visible        boolean not null default true,
+  enabled        boolean not null default true,
+  encrypted_url  text not null,
+  url_iv         text not null,
+  ics_content    text,
+  etag           text,
+  last_modified  text,
+  last_sync_at   timestamptz,
+  last_status    text not null default 'pending'
+                 check (last_status in ('pending','ok','error')),
+  last_error     text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  unique (user_id, id)
+);
+create index if not exists calendar_subscriptions_due
+  on public.calendar_subscriptions (enabled, last_sync_at)
+  where enabled = true;
+create index if not exists calendar_subscriptions_user
+  on public.calendar_subscriptions (user_id, created_at);
+alter table public.calendar_subscriptions enable row level security;
+revoke all on public.calendar_subscriptions from anon, authenticated;
+grant all on public.calendar_subscriptions to service_role;
+
+-- После развёртывания sync-calendar-subscriptions создайте расписание в pg_cron.
+-- Инструкция и готовый запрос находятся в README.md.
