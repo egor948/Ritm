@@ -11,6 +11,7 @@ import { habitsScreen, tickTimers } from './habits.js';
 import { applyTheme, openPasswordRecoverySheet } from './settings.js';
 import * as Sync from './sync.js';
 import * as Push from './push.js';
+import { startExternalCalendars } from './external-calendars.js';
 import { closeTopLayer, hasLayer } from './layers.js';
 
 const TABS = [
@@ -274,6 +275,7 @@ if (Sync.configured()) {
     .catch((e) => { console.warn('OAuth callback', e); toast(e.message || 'Не удалось завершить авторизацию'); })
     .finally(() => Sync.startAuto());
 }
+startExternalCalendars();
 Push.start();
 
 if ('serviceWorker' in navigator) {
