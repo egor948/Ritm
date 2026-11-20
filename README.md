@@ -1,5 +1,54 @@
 # Ритм
 
+## Внешние календари — серверная основа (этап 1)
+
+Подготовлена серверная часть подписок на внешние iCalendar-календари. На первом этапе принимаются только секретные HTTPS-ссылки Google Calendar вида `https://calendar.google.com/calendar/ical/.../basic.ics`.
+
+**Что уже реализовано:**
+- отдельная таблица `calendar_subscriptions` с изоляцией записей по аккаунтам;
+- секретный URL шифруется AES-256-GCM до записи в базу; открытый URL не возвращается клиенту;
+- Edge Function `calendar-subscriptions`: список, добавление, изменение названия/цвета/видимости/активности, ручное обновление и удаление;
+- Edge Function `sync-calendar-subscriptions`: фоновая синхронизация включённых подписок;
+- проверка HTTPS и домена, запрет перенаправлений, тайм-аут загрузки 15 секунд и лимит файла 1 МБ;
+- условные HTTP-запросы по ETag и Last-Modified, чтобы не скачивать неизменившийся календарь повторно.
+
+### Подключение к существующему Supabase
+
+1. В Supabase → SQL Editor выполните файл `supabase/migrations/20261120_calendar_subscriptions.sql`. Основная схема `supabase/schema.sql` также содержит таблицу для новых установок.
+2. Сгенерируйте отдельный ключ шифрования на своём компьютере:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   ```
+   Сохраните результат в менеджере паролей. Это отдельный секрет; он не совпадает с `CRON_SECRET`, VAPID-ключами или ключом Supabase.
+3. В терминале из корня репозитория установите секрет:
+   ```bash
+   supabase secrets set CALENDAR_ENCRYPTION_KEY=ВСТАВЬТЕ_СГЕНЕРИРОВАННЫЙ_КЛЮЧ
+   ```
+   Не добавляйте этот ключ в `config.js`, GitHub или клиентский код. Потеря ключа сделает сохранённые URL подписок нечитаемыми.
+4. Разверните функции:
+   ```bash
+   supabase functions deploy calendar-subscriptions
+   supabase functions deploy sync-calendar-subscriptions --no-verify-jwt
+   ```
+   Первая функция требует авторизованную сессию Ritm. Вторая принимает только запрос с уже настроенным в Supabase `CRON_SECRET`.
+5. Убедитесь, что расширения `pg_cron` и `pg_net` включены (Database → Extensions). Затем один раз выполните в SQL Editor, используя существующие Project Ref и CRON_SECRET:
+   ```sql
+   select cron.schedule('sync-calendar-subscriptions', '*/15 * * * *', $$
+     select net.http_post(
+       url := 'https://<PROJECT_REF>.supabase.co/functions/v1/sync-calendar-subscriptions',
+       headers := jsonb_build_object(
+         'Content-Type', 'application/json',
+         'x-cron-secret', '<CRON_SECRET>'
+       ),
+       body := '{}'::jsonb
+     );
+   $$);
+   ```
+6. В Database → Cron Jobs проверьте, что задание `sync-calendar-subscriptions` появляется и запускается раз в 15 минут. Проверить результат ручного обновления и статусы можно будет в интерфейсе Ritm на следующем этапе.
+
+**Важно:** серверная основа уже добавлена в репозиторий, но пользовательский экран управления подписками и отображение внешних событий в календаре ещё не подключены. До завершения следующего этапа внешние подписки не появятся в интерфейсе. Никому не отправляйте секретную iCalendar-ссылку: она даёт доступ к содержимому календаря.
+
+
 ## Обновление 4.18.0
 
 - Импортируются изменённые отдельные вхождения повторяющихся событий iCalendar. Исходная дата исключается из серии, а перенесённое или изменённое событие добавляется отдельно.
