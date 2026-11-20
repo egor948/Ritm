@@ -452,19 +452,48 @@ test('iCalendar принимает WKST для простых недельных
   assert.ok(!parsed.warnings.some((warning) => warning.includes('сложного правила')));
 });
 
-test('iCalendar предупреждает о неподдерживаемых отдельных изменениях повторения', () => {
+test('iCalendar импортирует изменённые и отменённые отдельные вхождения серии', () => {
   const source = [
     'BEGIN:VCALENDAR', 'VERSION:2.0',
     'BEGIN:VEVENT', 'UID:series@example.test',
     'DTSTART:20261123T100000', 'DTEND:20261123T110000', 'SUMMARY:Series',
-    'RRULE:FREQ=DAILY;COUNT=3', 'END:VEVENT',
+    'RRULE:FREQ=DAILY;COUNT=4', 'END:VEVENT',
     'BEGIN:VEVENT', 'UID:series@example.test',
     'RECURRENCE-ID:20261124T100000',
-    'DTSTART:20261124T120000', 'DTEND:20261124T130000', 'SUMMARY:Moved',
+    'DTSTART:20261125T120000', 'DTEND:20261125T130000', 'SUMMARY:Moved',
+    'DESCRIPTION:New time and date', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:series@example.test',
+    'RECURRENCE-ID:20261126T100000', 'STATUS:CANCELLED',
+    'DTSTART:20261126T100000', 'DTEND:20261126T110000', 'SUMMARY:Cancelled',
     'END:VEVENT', 'END:VCALENDAR',
-  ].join('\r\n');
+  ].join('\\r\\n');
+  const parsed = parseCalendarICS(source);
+  assert.equal(parsed.events.length, 2);
+  const series = parsed.events.find((event) => event.icsUid === 'series@example.test');
+  const moved = parsed.events.find((event) => event.title === 'Moved');
+  assert.deepEqual(series.exdates, ['2026-11-24', '2026-11-26']);
+  assert.equal(moved.date, '2026-11-25');
+  assert.equal(moved.start, '12:00');
+  assert.equal(moved.end, '13:00');
+  assert.equal(moved.repeat.freq, 'none');
+  assert.equal(moved.notes, 'New time and date');
+  assert.match(moved.icsUid, /^series@example\\.test#RITM-OVERRIDE-/);
+  assert.ok(!parsed.warnings.some((warning) => warning.includes('отдельное вхождение') && warning.includes('пропущено')));
+});
+
+test('iCalendar не применяет неполное изменение серии RANGE=THISANDFUTURE', () => {
+  const source = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    'BEGIN:VEVENT', 'UID:series-range@example.test',
+    'DTSTART:20261123T100000', 'DTEND:20261123T110000', 'SUMMARY:Series',
+    'RRULE:FREQ=DAILY;COUNT=3', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:series-range@example.test',
+    'RECURRENCE-ID;RANGE=THISANDFUTURE:20261124T100000',
+    'DTSTART:20261124T120000', 'DTEND:20261124T130000', 'SUMMARY:Moved forward',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].join('\\r\\n');
   const parsed = parseCalendarICS(source);
   assert.equal(parsed.events.length, 1);
-  assert.equal(parsed.events[0].title, 'Series');
-  assert.ok(parsed.warnings.some((warning) => warning.includes('отдельное вхождение')));
+  assert.deepEqual(parsed.events[0].exdates, []);
+  assert.ok(parsed.warnings.some((warning) => warning.includes('с этого вхождения и далее')));
 });
