@@ -90,10 +90,10 @@ const RENDER = {
     const now = nowMin();
     const rows = [];
     for (const d of items.deadlines) rows.push({ k: 'g' + d.id, time: 'срок', title: `Цель: ${d.title}`, color: d.color, sub: null, onClick: () => openGoalDetail(d.id), past: false, order: -2 });
-    for (const a of items.allDay) rows.push({ k: a.key, time: 'весь день', title: a.title, color: a.color, sub: a.ref.location, onClick: () => (a.ref.externalReadOnly ? openExternalEventDetails(a.ref) : editEvent(a.ref, {}, today)), past: false, order: -1 });
+    for (const a of items.allDay) rows.push({ k: a.key, time: 'весь день', title: a.title, color: a.color, sub: a.ref.location, onClick: () => (a.ref.externalReadOnly ? openExternalEventDetails({ ...a.ref, date: a.date }) : editEvent(a.ref, {}, today)), past: false, order: -1 });
     for (const t of items.timed) rows.push({
       k: t.key, taskId: t.type === 'task' ? t.id : null, taskDone: !!t.done, time: fromMin(t.startMin), end: fromMin(t.endMin), title: t.title, color: t.color, sub: t.type === 'event' ? t.ref.location : 'Задача', past: t.endMin <= now || t.done, order: t.startMin,
-      onClick: () => (t.type === 'event' ? (t.ref.externalReadOnly ? openExternalEventDetails(t.ref) : editEvent(t.ref, {}, today)) : editTask(t.ref)),
+      onClick: () => (t.type === 'event' ? (t.ref.externalReadOnly ? openExternalEventDetails({ ...t.ref, date: t.date }) : editEvent(t.ref, {}, today)) : editTask(t.ref)),
     });
     rows.sort((a, b) => a.order - b.order);
     const shown = rows.slice(0, 5);
