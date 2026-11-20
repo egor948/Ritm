@@ -77,7 +77,7 @@ export function layerScreen({ title, backLabel = 'Назад', onBack, actions =
   const nav = h('header', { class: 'nav' },
     h('button', { type: 'button', class: 'nav-back', onclick: onBack }, ic('chevL', 22), h('span', null, backLabel)),
     h('div', { class: 'nav-title center' }, title),
-    h('div', { class: 'nav-actions' }, actions));
+    h('div', { class: 'nav-actions' }, [...actions, h('button', { type: 'button', class: 'nav-btn nav-settings', 'aria-label': 'Настройки', onclick: () => document.dispatchEvent(new CustomEvent('open-settings')) }, ic('gear', 22))]));
   const scroller = h('div', { class: 'scroll' }, h('div', { class: 'content detail' }, children));
   const el = h('section', { class: 'screen' }, nav, scroller);
   let tick = false;
