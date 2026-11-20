@@ -213,7 +213,9 @@ function parseRule(value, start, warnings, summary) {
     } else days = [...new Set(parsed)].sort((a, b) => a - b);
   }
   const unsupported = Object.keys(fields).filter((key) => !['FREQ', 'INTERVAL', 'UNTIL', 'COUNT', 'BYDAY', 'WKST'].includes(key));
-  if (unsupported.length || fields.WKST && fields.WKST !== 'MO') {
+  const validWeekStart = !fields.WKST || /^(SU|MO|TU|WE|TH|FR|SA)$/.test(fields.WKST);
+  const weekStartAffectsPattern = freq === 'weekly' && days.length > 0;
+  if (unsupported.length || !validWeekStart || (weekStartAffectsPattern && fields.WKST && fields.WKST !== 'MO')) {
     warnings.push('Часть сложного правила повторения для «' + summary + '» не поддерживается.');
   }
   let until = null;
