@@ -214,7 +214,7 @@ function parseRule(value, start, warnings, summary) {
   }
   const unsupported = Object.keys(fields).filter((key) => !['FREQ', 'INTERVAL', 'UNTIL', 'COUNT', 'BYDAY', 'WKST'].includes(key));
   const validWeekStart = !fields.WKST || /^(SU|MO|TU|WE|TH|FR|SA)$/.test(fields.WKST);
-  const weekStartAffectsPattern = freq === 'weekly' && days.length > 0;
+  const weekStartAffectsPattern = freq === 'weekly' && interval > 1;
   if (unsupported.length || !validWeekStart || (weekStartAffectsPattern && fields.WKST && fields.WKST !== 'MO')) {
     warnings.push('Часть сложного правила повторения для «' + summary + '» не поддерживается.');
   }
