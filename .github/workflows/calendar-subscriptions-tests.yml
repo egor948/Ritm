@@ -3,11 +3,11 @@ name: Calendar subscription helper tests
 on:
   push:
     paths:
-      - "supabase/functions/_shared/**"
+      - "supabase/functions/**"
       - ".github/workflows/calendar-subscriptions-tests.yml"
   pull_request:
     paths:
-      - "supabase/functions/_shared/**"
+      - "supabase/functions/**"
       - ".github/workflows/calendar-subscriptions-tests.yml"
 
 jobs:
