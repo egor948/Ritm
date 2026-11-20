@@ -3,19 +3,21 @@ import { h, todayStr, addDays, greeting, fmtLong, nowMin, fromMin, fmtRemain, pl
 import * as S from './store.js';
 import { visibleEventsData } from './calendars.js';
 import { dayItems, dayScore, isScheduled, habitDone, habitStreaks, goalProgress, habitTarget } from './logic.js';
-import { ic, cv, ring, emptyState } from './ui.js';
+import { ic, cv, ring, emptyState, openSheet, toast } from './ui.js';
 import { screen, navBtn } from './shell.js';
 import { taskRow, habitChip, progressBar } from './components.js';
 import { editTask, editEvent, quickAdd, editHabit, editGoal } from './editors.js';
 import { go, view } from './nav.js';
 import { openGoalDetail, progressLabel } from './goals.js';
 import { openHabitDetail } from './habits.js';
-import { openSettings, openWidgetsEditor } from './settings.js';
+import { openSettings } from './settings.js';
 import { filterTasks } from './tasks.js';
 import { isTaskInCompletionWindow, isTaskExitStarted } from './task-completion.js';
 import { openExternalEventDetails } from './external-calendars.js';
 
 const WIDE = new Set(['habits', 'agenda', 'tasks', 'goals', 'week']);
+let widgetsEditMode = false;
+
 const TITLES = {
   day: ['День', 'target', 'blue'], next: ['Дальше', 'clock', 'red'], habits: ['Привычки', 'flame', 'green'], agenda: ['Расписание', 'calendar', 'red'],
   tasks: ['Задачи на сегодня', 'list', 'blue'], goals: ['Цели', 'target', 'purple'], week: ['Неделя', 'sparkle', 'indigo'], streak: ['Серия', 'flame', 'orange'], overdue: ['Просрочено', 'flag', 'orange'],
@@ -26,6 +28,105 @@ function widgetShell(id, i, body, { onClick, extra } = {}) {
   return h('div', { class: 'widget rise' + (WIDE.has(id) ? ' wide' : '') + (onClick ? ' pressable' : '') + ' w-' + id, style: { '--c': cv(color), '--i': i }, onclick: onClick },
     h('div', { class: 'w-head' }, h('span', { class: 'w-ic' }, ic(icon, 15)), h('span', { class: 'w-title' }, title), extra || null),
     body);
+}
+
+function persistWidgetOrder(grid) {
+  const settings = S.settings();
+  const byId = new Map(settings.widgets.map((widget) => [widget.id, widget]));
+  const visibleOrder = [...grid.querySelectorAll('.widget-edit-card')].map((node) => byId.get(node.dataset.widgetId)).filter(Boolean);
+  const hidden = settings.widgets.filter((widget) => !widget.on);
+  S.setSettings({ widgets: [...visibleOrder, ...hidden] });
+}
+
+function bindWidgetDrag(card, grid) {
+  const handle = card.querySelector('.widget-edit-handle');
+  if (!handle) return;
+  let pointerId = null;
+  let moved = false;
+  handle.addEventListener('pointerdown', (event) => {
+    if (pointerId != null || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    pointerId = event.pointerId;
+    moved = false;
+    card.classList.add('dragging');
+    try { handle.setPointerCapture(pointerId); } catch (_) {}
+    event.preventDefault();
+  });
+  handle.addEventListener('pointermove', (event) => {
+    if (event.pointerId !== pointerId) return;
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('.widget-edit-card');
+    if (!target || target === card || target.parentElement !== grid) return;
+    const rect = target.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2
+      || (Math.abs(event.clientY - (rect.top + rect.height / 2)) < rect.height * 0.2 && event.clientX > rect.left + rect.width / 2);
+    grid.insertBefore(card, after ? target.nextSibling : target);
+    moved = true;
+  });
+  const finish = (event) => {
+    if (event.pointerId !== pointerId) return;
+    card.classList.remove('dragging');
+    pointerId = null;
+    if (moved) persistWidgetOrder(grid);
+  };
+  handle.addEventListener('pointerup', finish);
+  handle.addEventListener('pointercancel', finish);
+  handle.addEventListener('lostpointercapture', finish);
+}
+
+function openWidgetPicker() {
+  const available = S.settings().widgets.filter((widget) => !widget.on);
+  if (!available.length) { toast('Все виджеты уже добавлены'); return; }
+  openSheet({
+    title: 'Добавить виджет',
+    left: { label: 'Отмена' },
+    right: null,
+    tall: true,
+    build(api) {
+      api.body.append(
+        h('div', { class: 'widget-picker-list' }, available.map((widget) => h('button', {
+          type: 'button',
+          class: 'widget-picker-item',
+          onclick: () => {
+            const next = S.settings().widgets.map((item) => item.id === widget.id ? { ...item, on: true } : item);
+            S.setSettings({ widgets: next });
+            api.close(true);
+            document.dispatchEvent(new CustomEvent('rerender'));
+          },
+        },
+          h('span', { class: 'widget-picker-icon' }, ic(TITLES[widget.id]?.[1] || 'sparkle', 19)),
+          h('span', { class: 'widget-picker-copy' }, h('b', null, TITLES[widget.id]?.[0] || widget.id), h('small', null, WIDGET_DESCRIPTIONS[widget.id] || 'Дополнительный виджет')),
+          ic('plus', 18)))),
+        h('div', { class: 'sheet-pad' }),
+      );
+    },
+  });
+}
+
+const WIDGET_DESCRIPTIONS = {
+  day: 'Общий процент выполненных дел и привычек',
+  next: 'Следующее событие или задача по времени',
+  habits: 'Быстрые отметки привычек на сегодня',
+  agenda: 'События и задачи сегодняшнего дня',
+  tasks: 'Список задач, запланированных на сегодня',
+  goals: 'Краткий прогресс активных целей',
+  week: 'Активность и выполнение за неделю',
+  streak: 'Текущая серия выполнения привычек',
+  overdue: 'Задачи, срок которых уже прошёл',
+};
+
+function makeWidgetCard(widget, index, ctx, grid) {
+  const content = RENDER[widget.id] ? RENDER[widget.id](ctx, index) : null;
+  if (!content || !widgetsEditMode) return content;
+  const card = h('div', { class: 'widget-edit-card' + (WIDE.has(widget.id) ? ' wide' : ''), 'data-widget-id': widget.id },
+    h('div', { class: 'widget-edit-tools' },
+      h('button', { type: 'button', class: 'widget-edit-handle', 'aria-label': 'Переместить виджет ' + (TITLES[widget.id]?.[0] || widget.id) }, ic('drag', 18)),
+      h('button', { type: 'button', class: 'widget-edit-remove', 'aria-label': 'Удалить виджет ' + (TITLES[widget.id]?.[0] || widget.id), onclick: (event) => {
+        event.stopPropagation();
+        S.setSettings({ widgets: S.settings().widgets.map((item) => item.id === widget.id ? { ...item, on: false } : item) });
+        document.dispatchEvent(new CustomEvent('rerender'));
+      } }, ic('trash', 17))),
+    content);
+  bindWidgetDrag(card, grid);
+  return card;
 }
 
 export function todayScreen() {
@@ -43,13 +144,20 @@ export function todayScreen() {
   if (!total) {
     children.push(emptyState({ emoji: '👋', title: 'Добро пожаловать в «Ритм»', text: 'Здесь будут ваши цели, задачи, привычки и календарь. Начните с чего-нибудь одного — всё остальное свяжется само.', action: { label: 'Добавить первое', onClick: () => quickAdd() } }));
   } else if (!ws.length) {
-    children.push(emptyState({ emoji: '🧩', title: 'Виджетов нет', text: 'Включите нужные виджеты в настройках экрана.', action: { label: 'Настроить виджеты', onClick: openWidgetsEditor } }));
+    children.push(emptyState({ emoji: '🧩', title: 'Виджетов нет', text: 'Добавьте нужные блоки на экран «Сегодня».', action: { label: 'Добавить виджет', onClick: openWidgetPicker } }));
   } else {
-    children.push(h('div', { class: 'widgets' }, ws.map((w, i) => RENDER[w.id] ? RENDER[w.id](ctx, i) : null)));
+    const grid = h('div', { class: 'widgets' });
+    grid.append(...ws.map((widget, index) => makeWidgetCard(widget, index, ctx, grid)));
+    if (widgetsEditMode) {
+      grid.append(h('button', { type: 'button', class: 'widget-add-tile', onclick: openWidgetPicker }, ic('plus', 24), h('b', null, 'Добавить виджет')));
+    }
+    children.push(grid);
   }
   return screen({
     id: 'today', title: greeting(), eyebrow: fmtLong(today),
-    actions: [navBtn('sliders', 'Настроить виджеты', openWidgetsEditor), navBtn('gear', 'Настройки', openSettings)],
+    actions: widgetsEditMode
+      ? [navBtn('plus', 'Добавить виджет', openWidgetPicker), navBtn('check', 'Готово', () => { widgetsEditMode = false; document.dispatchEvent(new CustomEvent('rerender')); })]
+      : [navBtn('edit', 'Изменить виджеты', () => { widgetsEditMode = true; document.dispatchEvent(new CustomEvent('rerender')); })],
     children,
   });
 }
