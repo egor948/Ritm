@@ -78,9 +78,9 @@ function parseIcsDate(value, params = {}, warnings = []) {
   const raw = String(value || '').trim();
   let match = /^(\d{4})(\d{2})(\d{2})$/.exec(raw);
   if (match) {
-    const date = dateText(Number(match[1]), Number(match[2]), Number(match[3]));
-    const month = Number(match[2]), day = Number(match[3]);
-    if (month < 1 || month > 12 || day < 1 || day > daysInMonth(date)) return null;
+    const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+    const date = dateText(year, month, day);
+    if (month < 1 || month > 12 || day < 1 || day > daysInMonth(dateText(year, month, 1))) return null;
     return { date, time: null, allDay: true };
   }
   match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?$/i.exec(raw);
@@ -296,6 +296,7 @@ export function parseCalendarICS(text) {
     if (all(props, 'RDATE').length) warnings.push('Дополнительные даты повторения события «' + summary + '» не поддерживаются и были пропущены.');
     const endProp = first(props, 'DTEND');
     const parsedEnd = endProp && parseIcsDate(endProp.value, endProp.params, warnings);
+    if (endProp && !parsedEnd) warnings.push('Некорректное окончание события «' + summary + '» было проигнорировано.');
     const allDay = start.allDay;
     let endDate = null;
     let end = null;
