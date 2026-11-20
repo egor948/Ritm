@@ -137,7 +137,9 @@ async function authCall(path, body) {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const m = json.error_description || json.msg || json.message || json.error || 'Ошибка входа';
-    throw new Error(/invalid login/i.test(m) ? 'Неверный email или пароль' : /already/i.test(m) ? 'Этот email уже зарегистрирован' : /confirm/i.test(m) ? 'Подтверждение Email включено в настройках Supabase. Отключите Confirm email для регистрации без письма.' : m);
+    const isSignup = String(path || '').startsWith('signup?');
+    const duplicateEmail = isSignup && /(already registered|user already exists|email already in use|already been registered)/i.test(m);
+    throw new Error(/invalid login/i.test(m) ? 'Неверный email или пароль' : duplicateEmail ? 'Этот email уже зарегистрирован' : /confirm/i.test(m) ? 'Подтверждение Email включено в настройках Supabase. Отключите Confirm email для регистрации без письма.' : m);
   }
   return json;
 }
@@ -258,7 +260,28 @@ export async function signOut() {
 async function token() {
   if (!session) throw new Error('Нет входа');
   if (Date.now() < session.expiresAt) return session.access;
-  const j = await authCall('token?grant_type=refresh_token', { refresh_token: session.refresh });
+  const previous = session;
+  let j;
+  try {
+    j = await authCall('token?grant_type=refresh_token', { refresh_token: previous.refresh });
+  } catch (error) {
+    // Another open tab may have rotated the refresh token and saved the new session.
+    let latest = null;
+    try { latest = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch (_) {}
+    if (latest && latest.userId === previous.userId && latest.refresh && latest.refresh !== previous.refresh) {
+      session = latest;
+      if (Date.now() < Number(latest.expiresAt || 0)) return latest.access;
+      try {
+        j = await authCall('token?grant_type=refresh_token', { refresh_token: latest.refresh });
+      } catch (_) {
+        throw new Error('Сессия Ritm устарела. Войдите в аккаунт Ritm заново, затем повторите подключение календаря.');
+      }
+    } else if (/refresh_token_already_used|already been used|invalid refresh token/i.test(error.message || '')) {
+      throw new Error('Сессия Ritm устарела. Войдите в аккаунт Ritm заново, затем повторите подключение календаря.');
+    } else {
+      throw error;
+    }
+  }
   saveSession({ ...toSession(j), email: session.email, userId: session.userId });
   if (realtimeClient) realtimeClient.realtime.setAuth(session.access).catch((e) => console.warn('Realtime auth', e));
   return session.access;
