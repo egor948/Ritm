@@ -281,20 +281,62 @@ export function parseCalendarICS(text) {
   const events = [];
   const components = parseEvents(text);
   if (components.length > 5000) warnings.push('Файл содержит больше 5000 событий; импортирована только первая часть.');
-  for (const component of components.slice(0, 5000)) {
+
+  const selected = components.slice(0, 5000);
+  const masters = selected.filter((component) => !first(component.props, 'RECURRENCE-ID'));
+  const exceptions = selected.filter((component) => first(component.props, 'RECURRENCE-ID'));
+  const ordered = [...masters, ...exceptions];
+  const masterEvents = new Map();
+
+  for (const component of ordered) {
     const props = component.props;
+    const recurrenceProp = first(props, 'RECURRENCE-ID');
+    const isException = !!recurrenceProp;
+    const uidProp = first(props, 'UID');
+    const sourceUid = uidProp && uidProp.value.trim() ? uidProp.value.trim() : '';
+    const summary = unescapeText((first(props, 'SUMMARY') || {}).value || 'Без названия').trim() || 'Без названия';
+    const status = String((first(props, 'STATUS') || {}).value || '').toUpperCase();
+
+    let recurrenceStart = null;
+    let master = null;
+    if (isException) {
+      if (recurrenceProp.params.RANGE) {
+        warnings.push('Изменение серии «' + summary + '» с этого вхождения и далее не поддерживается; правило повторения оставлено без изменений.');
+        continue;
+      }
+      recurrenceStart = parseIcsDate(recurrenceProp.value, recurrenceProp.params, warnings);
+      if (!recurrenceStart) {
+        warnings.push('Отдельное вхождение «' + summary + '» пропущено: некорректен RECURRENCE-ID.');
+        continue;
+      }
+      master = sourceUid && masterEvents.get(sourceUid);
+      if (!master || !master.repeat || master.repeat.freq === 'none') {
+        warnings.push('Отдельное вхождение «' + summary + '» пропущено: не найдено основное повторяющееся событие.');
+        continue;
+      }
+      if (recurrenceStart.date < master.date) {
+        warnings.push('Отдельное вхождение «' + summary + '» пропущено: его дата раньше начала серии.');
+        continue;
+      }
+      if (status === 'CANCELLED') {
+        master.exdates = [...new Set([...(master.exdates || []), recurrenceStart.date])];
+        continue;
+      }
+    } else if (status === 'CANCELLED') {
+      continue;
+    }
+
     const startProp = first(props, 'DTSTART');
     const start = startProp && parseIcsDate(startProp.value, startProp.params, warnings);
     if (!start) {
       warnings.push('Одно событие пропущено: отсутствует или некорректна дата начала.');
       continue;
     }
-    const summary = unescapeText((first(props, 'SUMMARY') || {}).value || 'Без названия').trim() || 'Без названия';
-    if (String((first(props, 'STATUS') || {}).value || '').toUpperCase() === 'CANCELLED') continue;
-    if (first(props, 'RECURRENCE-ID')) {
-      warnings.push('Изменённое отдельное вхождение «' + summary + '» пропущено; основное правило повторения сохранено без этой правки.');
-      continue;
+
+    if (isException && master) {
+      master.exdates = [...new Set([...(master.exdates || []), recurrenceStart.date])];
     }
+
     if (all(props, 'RDATE').length) warnings.push('Дополнительные даты повторения события «' + summary + '» не поддерживаются и были пропущены.');
     const endProp = first(props, 'DTEND');
     const parsedEnd = endProp && parseIcsDate(endProp.value, endProp.params, warnings);
@@ -334,7 +376,7 @@ export function parseCalendarICS(text) {
     }
     let repeat = { freq: 'none' };
     const ruleProp = first(props, 'RRULE');
-    if (ruleProp) repeat = parseRule(ruleProp.value, start.date, warnings, summary);
+    if (ruleProp && !isException) repeat = parseRule(ruleProp.value, start.date, warnings, summary);
     if (allDay && endDate && repeat.freq !== 'none') {
       warnings.push('Многодневное повторяющееся событие «' + summary + '» в Ritm будет отображаться только в дату начала каждого повтора.');
     }
@@ -377,14 +419,13 @@ export function parseCalendarICS(text) {
         warnings.push('Абсолютное напоминание у события «' + summary + '» не поддерживается и не импортировано.');
       }
     }
-    const uidProp = first(props, 'UID');
-    const icsUid = uidProp && uidProp.value.trim()
-      ? uidProp.value.trim()
-      : stableId(summary + '|' + start.date + '|' + (start.time || '') + '|' + (first(props, 'LOCATION') || {}).value);
+    const baseUid = sourceUid || stableId(summary + '|' + start.date + '|' + (start.time || '') + '|' + (first(props, 'LOCATION') || {}).value);
+    const recurrenceKey = recurrenceStart && (recurrenceStart.date + (recurrenceStart.time ? 'T' + recurrenceStart.time : ''));
+    const icsUid = isException ? baseUid + '#RITM-OVERRIDE-' + recurrenceKey : baseUid;
     const description = unescapeText((first(props, 'DESCRIPTION') || {}).value || '');
     const colorProp = first(props, 'X-RITM-COLOR');
     const colorOverrideProp = first(props, 'X-RITM-COLOR-OVERRIDE');
-    events.push({
+    const event = {
       icsUid,
       title: summary,
       date: start.date,
@@ -399,7 +440,9 @@ export function parseCalendarICS(text) {
       exdates: [...new Set(exdates)],
       color: colorProp ? colorProp.value : 'blue',
       colorOverride: colorOverrideProp ? colorOverrideProp.value.toUpperCase() === 'TRUE' : !!colorProp,
-    });
+    };
+    events.push(event);
+    if (!isException && sourceUid && repeat.freq !== 'none') masterEvents.set(sourceUid, event);
   }
   const unique = new Map();
   for (const event of events) unique.set(event.icsUid, event);
