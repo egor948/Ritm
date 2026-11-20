@@ -3,6 +3,7 @@ import { h, uid, clear, COLOR_KEYS, plural } from './util.js';
 import * as S from './store.js';
 import { openSheet, actionSheet, group, groupTitle, groupNote, row, toggle, textInput, colorPicker, toast, ic, cv } from './ui.js';
 import { openCalendarIcsImport, exportCalendarIcs } from './calendar-ics-ui.js';
+import { externalEventsData, openExternalCalendarManager } from './external-calendars.js';
 
 export const DEFAULT_CALENDAR_ID = S.DEFAULT_CALENDAR_ID;
 
@@ -30,8 +31,9 @@ export function filterCalendarEvents(events, calendars = [], selectedId = null) 
 }
 
 export function visibleEventsData(data, { selected = false } = {}) {
+  const combined = externalEventsData(data);
   const selectedId = selected && S.settings().calFilters && S.settings().calFilters.calendarId;
-  return { ...data, events: filterCalendarEvents(data.events, data.calendars || [], selectedId) };
+  return { ...combined, events: filterCalendarEvents(combined.events, combined.calendars || [], selectedId) };
 }
 
 function openCalendarEditor(calendar, onSaved) {
@@ -154,6 +156,11 @@ export function openCalendarManager(onFilters, onSelectCalendar) {
     };
     api.body.append(
       group(
+        h('button', {
+          type: 'button',
+          class: 'row-btn',
+          onclick: () => openExternalCalendarManager(draw, onSelectCalendar),
+        }, ic('cloud', 17), 'Внешние календари Google'),
         h('button', { type: 'button', class: 'row-btn', onclick: () => openCalendarIcsImport(activeId || DEFAULT_CALENDAR_ID, draw) }, ic('inbox', 17), 'Импортировать .ics'),
         h('button', { type: 'button', class: 'row-btn', onclick: () => {
           const data = S.data();
