@@ -121,7 +121,18 @@ export async function fetchCalendarIcs(
     };
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') throw new Error('Google Calendar не ответил за 15 секунд.');
-    throw error;
+    const message = error instanceof Error ? error.message : '';
+    // Не сохраняем текст низкоуровневой ошибки fetch: некоторые рантаймы включают
+    // в неё полный URL, содержащий секретный токен календаря.
+    const safePrefixes = [
+      'Ссылка календаря', 'Источник календаря', 'Поддерживаются только',
+      'Для ссылки календаря', 'Ссылка календаря содержит',
+      'Нужна секретная iCalendar-ссылка', 'Google Calendar отклонил ссылку',
+      'Google Calendar временно недоступен', 'Источник вернул не календарный файл',
+      'Файл календаря больше допустимого размера', 'Полученный файл не распознан',
+    ];
+    if (safePrefixes.some((prefix) => message.startsWith(prefix))) throw error;
+    throw new Error('Не удалось загрузить календарь из Google Calendar. Проверьте доступность источника.');
   } finally {
     clearTimeout(timeout);
   }
