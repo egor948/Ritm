@@ -77,7 +77,12 @@ function zonedWallEpoch(year, month, day, hour, minute, second, timeZone) {
 function parseIcsDate(value, params = {}, warnings = []) {
   const raw = String(value || '').trim();
   let match = /^(\d{4})(\d{2})(\d{2})$/.exec(raw);
-  if (match) return { date: dateText(Number(match[1]), Number(match[2]), Number(match[3])), time: null, allDay: true };
+  if (match) {
+    const date = dateText(Number(match[1]), Number(match[2]), Number(match[3]));
+    const month = Number(match[2]), day = Number(match[3]);
+    if (month < 1 || month > 12 || day < 1 || day > daysInMonth(date)) return null;
+    return { date, time: null, allDay: true };
+  }
   match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?$/i.exec(raw);
   if (!match) return null;
   const parts = match.slice(1, 7).map((part) => Number(part || 0));
@@ -153,7 +158,19 @@ function shiftMonthClamped(date, months) {
 function countUntil(start, freq, interval, days, count) {
   if (count <= 1) return start;
   if (freq === 'daily') return addDays(start, (count - 1) * interval);
-  if (freq === 'weekly' && (!days || days.length === 1)) return addDays(start, (count - 1) * interval * 7);
+  if (freq === 'weekly' && days && days.length) {
+    const sorted = [...new Set(days)].sort((a, b) => a - b);
+    const firstWeek = sorted.filter((day) => day >= dow(start));
+    if (count <= firstWeek.length) {
+      const day = firstWeek[count - 1];
+      return addDays(weekStart(start, 1), (day + 6) % 7);
+    }
+    const remaining = count - firstWeek.length;
+    const activeWeek = 1 + Math.floor((remaining - 1) / sorted.length) * interval;
+    const day = sorted[(remaining - 1) % sorted.length];
+    return addDays(weekStart(start, 1), activeWeek * 7 + (day + 6) % 7);
+  }
+  if (freq === 'weekly') return addDays(start, (count - 1) * interval * 7);
   if (freq === 'monthly') return shiftMonthClamped(start, (count - 1) * interval);
   if (freq === 'yearly') return shiftMonthClamped(start, (count - 1) * interval * 12);
   let current = start;
