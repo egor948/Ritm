@@ -215,6 +215,9 @@ function parseRule(value, start, warnings, summary) {
     warnings.push('Часть сложного правила повторения для «' + summary + '» не поддерживается.');
   }
   let until = null;
+  if (freq === 'weekly' && days.length && !days.includes(dow(start))) {
+    warnings.push('Дата начала события «' + summary + '» не входит в BYDAY. В Ritm будут показаны только выбранные дни недели.');
+  }
   if (fields.COUNT) {
     const count = Math.max(1, Math.min(10000, Number(fields.COUNT) || 1));
     if (Number(fields.COUNT) > 10000) warnings.push('Количество повторов «' + summary + '» ограничено 10000.');
@@ -356,6 +359,8 @@ export function parseCalendarICS(text) {
         if (!reminders.some((r) => r.key === key)) reminders.push({ amount: amount / factor, unit, key });
       } else if (minutes > 0) {
         warnings.push('Напоминание после начала события «' + summary + '» не импортировано.');
+      } else if (trigger && minutes == null) {
+        warnings.push('Абсолютное напоминание у события «' + summary + '» не поддерживается и не импортировано.');
       }
     }
     const uidProp = first(props, 'UID');
