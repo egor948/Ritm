@@ -25,3 +25,8 @@ jobs:
           deno test --allow-env
           supabase/functions/_shared/calendar-url.test.ts
           supabase/functions/_shared/calendar-sync.test.ts
+      - name: Type-check calendar Edge Functions
+        run: >-
+          deno check
+          supabase/functions/calendar-subscriptions/index.ts
+          supabase/functions/sync-calendar-subscriptions/index.ts
