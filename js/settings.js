@@ -404,6 +404,10 @@ function importData(api) {
   document.body.appendChild(inp); inp.click(); setTimeout(() => inp.remove(), 60000);
 }
 
+function googleMark() {
+  return h('span', { class: 'google-mark', 'aria-hidden': 'true' }, 'G');
+}
+
 function openSignIn(done) {
   let email = '', pass = '', mode = 'in';
   openSheet({
@@ -422,11 +426,11 @@ function openSignIn(done) {
           } catch (e) { msg.textContent = e.message || 'Не удалось войти'; }
         } });
         api.body.append(
-          h('button', { class: 'row-btn', onclick: async () => {
+          h('button', { class: 'row-btn google-signin-btn', onclick: async () => {
             msg.textContent = '';
             try { await Sync.startGoogleOAuth(); }
             catch (e) { msg.textContent = e.message || 'Не удалось открыть Google'; }
-          } }, 'Продолжить с Google'),
+          } }, googleMark(), h('span', null, 'Продолжить с Google')),
           groupNote('Или войдите по email и паролю'),
           group(
             h('div', { class: 'row solo' }, h('input', { class: 'inp', type: 'email', placeholder: 'Email', autocomplete: 'email', value: email, oninput: (e) => (email = e.target.value.trim()) })),
