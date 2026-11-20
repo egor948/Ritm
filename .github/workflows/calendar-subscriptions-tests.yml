@@ -36,7 +36,7 @@ jobs:
           node-version: 22
       - name: Check browser module syntax
         run: |
-          for file in js/app.js js/sync.js js/calendars.js js/calendar.js js/calendar-ics.js js/today.js js/external-calendars.js; do
+          for file in js/*.js; do
             node --experimental-default-type=module --check "$file"
           done
       - name: Test calendar and task logic
