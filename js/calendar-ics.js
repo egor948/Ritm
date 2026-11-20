@@ -198,7 +198,9 @@ function parseRule(value, start, warnings, summary) {
     warnings.push('Повторение «' + summary + '» не поддерживается и импортировано как разовое событие.');
     return { freq: 'none' };
   }
-  const interval = Math.max(1, Math.min(30, Number(fields.INTERVAL) || 1));
+  const rawInterval = Math.max(1, Number(fields.INTERVAL) || 1);
+  const interval = Math.min(30, rawInterval);
+  if (rawInterval > 30) warnings.push('Интервал повторения «' + summary + '» ограничен 30 в Ritm.');
   let days = [];
   if (fields.BYDAY) {
     const tokens = fields.BYDAY.split(',');
@@ -276,7 +278,8 @@ export function parseCalendarICS(text) {
   const warnings = [];
   const events = [];
   const components = parseEvents(text);
-  for (const component of components) {
+  if (components.length > 5000) warnings.push('Файл содержит больше 5000 событий; импортирована только первая часть.');
+  for (const component of components.slice(0, 5000)) {
     const props = component.props;
     const startProp = first(props, 'DTSTART');
     const start = startProp && parseIcsDate(startProp.value, startProp.params, warnings);
@@ -329,6 +332,9 @@ export function parseCalendarICS(text) {
     let repeat = { freq: 'none' };
     const ruleProp = first(props, 'RRULE');
     if (ruleProp) repeat = parseRule(ruleProp.value, start.date, warnings, summary);
+    if (allDay && endDate && repeat.freq !== 'none') {
+      warnings.push('Многодневное повторяющееся событие «' + summary + '» в Ritm будет отображаться только в дату начала каждого повтора.');
+    }
     const exdates = [];
     for (const prop of all(props, 'EXDATE')) {
       for (const value of prop.value.split(',')) {
@@ -350,13 +356,18 @@ export function parseCalendarICS(text) {
       }
       const minutes = trigger && parseDurationMinutes(trigger.value);
       if (minutes != null && minutes <= 0) {
-        const amount = Math.abs(minutes);
-        const unit = amount && amount % 10080 === 0 ? 'weeks'
-          : amount && amount % 1440 === 0 ? 'days'
-            : amount && amount % 60 === 0 ? 'hours' : 'minutes';
+        const duration = Math.abs(minutes);
+        const unit = duration && duration % 10080 === 0 ? 'weeks'
+          : duration && duration % 1440 === 0 ? 'days'
+            : duration && duration % 60 === 0 ? 'hours' : 'minutes';
         const factor = unit === 'weeks' ? 10080 : unit === 'days' ? 1440 : unit === 'hours' ? 60 : 1;
+        let amount = duration / factor;
+        if (amount > 9999) {
+          warnings.push('Интервал напоминания события «' + summary + '» ограничен 9999 ' + unit + ' в Ritm.');
+          amount = 9999;
+        }
         const key = amount + ':' + unit;
-        if (!reminders.some((r) => r.key === key)) reminders.push({ amount: amount / factor, unit, key });
+        if (!reminders.some((r) => r.key === key)) reminders.push({ amount, unit, key });
       } else if (minutes > 0) {
         warnings.push('Напоминание после начала события «' + summary + '» не импортировано.');
       } else if (trigger && minutes == null) {
@@ -447,7 +458,7 @@ function reminderTrigger(reminder) {
 }
 
 function foldCalendarLine(name, value) {
-  return foldLine(name + ':' + value);
+  return name + ':' + value;
 }
 
 export function buildCalendarICS(calendar, events) {
