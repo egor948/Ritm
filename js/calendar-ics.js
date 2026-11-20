@@ -159,8 +159,9 @@ function countUntil(start, freq, interval, days, count) {
   if (count <= 1) return start;
   if (freq === 'daily') return addDays(start, (count - 1) * interval);
   if (freq === 'weekly' && days && days.length) {
-    const sorted = [...new Set(days)].sort((a, b) => a - b);
-    const firstWeek = sorted.filter((day) => day >= dow(start));
+    const sorted = [...new Set(days)].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+    const startOffset = (dow(start) + 6) % 7;
+    const firstWeek = sorted.filter((day) => (day + 6) % 7 >= startOffset);
     if (count <= firstWeek.length) {
       const day = firstWeek[count - 1];
       return addDays(weekStart(start, 1), (day + 6) % 7);
