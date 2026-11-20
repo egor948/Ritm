@@ -390,7 +390,7 @@ test('iCalendar корректно считает COUNT для BYDAY, когда
     'DTSTART:20261128T100000', 'DTEND:20261128T110000', 'SUMMARY:Sunday series',
     'RRULE:FREQ=WEEKLY;BYDAY=SU;COUNT=2',
     'END:VEVENT', 'END:VCALENDAR',
-  ].join('\\r\\n');
+  ].join('\r\n');
   const parsed = parseCalendarICS(source);
   const event = parsed.events[0];
   assert.equal(event.repeat.until, '2026-12-06');
