@@ -8,7 +8,7 @@ import { calendarScreen, isDragging } from './calendar.js';
 import { tasksScreen } from './tasks.js';
 import { goalsScreen } from './goals.js';
 import { habitsScreen, tickTimers } from './habits.js';
-import { applyTheme, openPasswordRecoverySheet } from './settings.js';
+import { applyTheme, openPasswordRecoverySheet, openSettings } from './settings.js';
 import * as Sync from './sync.js';
 import * as Push from './push.js';
 import { startExternalCalendars } from './external-calendars.js';
@@ -106,6 +106,7 @@ const schedule = (() => {
 
 S.subscribe(schedule);
 document.addEventListener('rerender', () => { if (!isDragging()) render(); });
+document.addEventListener('open-settings', () => openSettings());
 window.addEventListener('hashchange', () => { const id = location.hash.replace('#/', ''); if (id && id !== current) go(id); });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 S.subscribe(applyTheme);
