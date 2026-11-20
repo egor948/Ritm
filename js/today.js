@@ -10,7 +10,6 @@ import { editTask, editEvent, quickAdd, editHabit, editGoal } from './editors.js
 import { go, view } from './nav.js';
 import { openGoalDetail, progressLabel } from './goals.js';
 import { openHabitDetail } from './habits.js';
-import { openSettings } from './settings.js';
 import { filterTasks } from './tasks.js';
 import { isTaskInCompletionWindow, isTaskExitStarted } from './task-completion.js';
 import { openExternalEventDetails } from './external-calendars.js';
