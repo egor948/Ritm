@@ -113,6 +113,7 @@ export function openCalendarManager(onFilters, onSelectCalendar) {
     const data = S.data();
     const calendars = [...data.calendars].sort((a, b) => Number(!!b.isDefault) - Number(!!a.isDefault) || (a.createdAt || 0) - (b.createdAt || 0));
     const activeId = S.settings().calFilters && S.settings().calFilters.calendarId || null;
+    const importTargetId = calendars.some((calendar) => calendar.id === activeId) ? activeId : DEFAULT_CALENDAR_ID;
     clear(api.body);
     const rows = calendars.map((calendar) => {
       const count = data.events.filter((event) => eventCalendarId(event) === calendar.id).length;
@@ -164,7 +165,7 @@ export function openCalendarManager(onFilters, onSelectCalendar) {
             api.close(true);
           }),
         }, ic('cloud', 17), 'Внешние календари Google'),
-        h('button', { type: 'button', class: 'row-btn', onclick: () => openCalendarIcsImport(activeId || DEFAULT_CALENDAR_ID, draw) }, ic('inbox', 17), 'Импортировать .ics'),
+        h('button', { type: 'button', class: 'row-btn', onclick: () => openCalendarIcsImport(importTargetId, draw) }, ic('inbox', 17), 'Импортировать .ics'),
         h('button', { type: 'button', class: 'row-btn', onclick: () => {
           const data = S.data();
           if (!data.events.length) { toast('Пока нечего экспортировать'); return; }
