@@ -80,7 +80,11 @@ function parseIcsDate(value, params = {}, warnings = []) {
   if (match) return { date: dateText(Number(match[1]), Number(match[2]), Number(match[3])), time: null, allDay: true };
   match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?$/i.exec(raw);
   if (!match) return null;
-  const parts = match.slice(1, 7).map((part, index) => Number(part || (index === 5 ? 0 : 0)));
+  const parts = match.slice(1, 7).map((part) => Number(part || 0));
+  const [checkYear, checkMonth, checkDay, checkHour, checkMinute, checkSecond] = parts;
+  const check = new Date(checkYear, checkMonth - 1, checkDay, checkHour, checkMinute, checkSecond);
+  if (check.getFullYear() !== checkYear || check.getMonth() + 1 !== checkMonth || check.getDate() !== checkDay
+      || check.getHours() !== checkHour || check.getMinutes() !== checkMinute || check.getSeconds() !== checkSecond) return null;
   const [year, month, day, hour, minute, second] = parts;
   let date;
   if (match[7]) {
@@ -107,7 +111,7 @@ function parseDurationMinutes(value) {
     + (Number(match[4] || 0) * 60)
     + Number(match[5] || 0)
     + (Number(match[6] || 0) / 60);
-  return Math.round(total) * (match[1] === '+' ? -1 : 1);
+  return Math.round(total) * (match[1] === '-' ? -1 : 1);
 }
 
 function dateMatchesRule(start, candidate, freq, interval, days) {
@@ -260,7 +264,12 @@ export function parseCalendarICS(text) {
       continue;
     }
     const summary = unescapeText((first(props, 'SUMMARY') || {}).value || 'Без названия').trim() || 'Без названия';
-    if ((first(props, 'STATUS') || {}).value === 'CANCELLED') continue;
+    if (String((first(props, 'STATUS') || {}).value || '').toUpperCase() === 'CANCELLED') continue;
+    if (first(props, 'RECURRENCE-ID')) {
+      warnings.push('Изменённое отдельное вхождение «' + summary + '» пропущено; основное правило повторения сохранено без этой правки.');
+      continue;
+    }
+    if (all(props, 'RDATE').length) warnings.push('Дополнительные даты повторения события «' + summary + '» не поддерживаются и были пропущены.');
     const endProp = first(props, 'DTEND');
     const parsedEnd = endProp && parseIcsDate(endProp.value, endProp.params, warnings);
     const allDay = start.allDay;
@@ -269,6 +278,14 @@ export function parseCalendarICS(text) {
     if (allDay) {
       if (parsedEnd && parsedEnd.allDay && parsedEnd.date > start.date) endDate = addDays(parsedEnd.date, -1);
       else if (parsedEnd && !parsedEnd.allDay) warnings.push('Окончание события «' + summary + '» не совпадает с форматом даты начала и было проигнорировано.');
+      else if (!parsedEnd) {
+        const durationProp = first(props, 'DURATION');
+        const duration = durationProp && parseDurationMinutes(durationProp.value);
+        if (duration > 0) {
+          const days = Math.max(1, Math.ceil(duration / 1440));
+          if (days > 1) endDate = addDays(start.date, days - 1);
+        }
+      }
     } else if (parsedEnd) {
       if (parsedEnd.date !== start.date) {
         warnings.push('Событие «' + summary + '» длится дольше одного календарного дня; в Ritm оно отображается до конца даты начала.');
@@ -301,6 +318,15 @@ export function parseCalendarICS(text) {
     const reminders = [];
     for (const alarm of component.alarms) {
       const trigger = first(alarm, 'TRIGGER');
+      const action = String((first(alarm, 'ACTION') || {}).value || 'DISPLAY').toUpperCase();
+      if (action !== 'DISPLAY') {
+        warnings.push('Напоминание другого типа у события «' + summary + '» не импортировано.');
+        continue;
+      }
+      if (trigger && String(trigger.params.RELATED || '').toUpperCase() === 'END') {
+        warnings.push('Напоминание относительно окончания события «' + summary + '» не поддерживается.');
+        continue;
+      }
       const minutes = trigger && parseDurationMinutes(trigger.value);
       if (minutes != null && minutes <= 0) {
         const amount = Math.abs(minutes);
@@ -310,6 +336,8 @@ export function parseCalendarICS(text) {
         const factor = unit === 'weeks' ? 10080 : unit === 'days' ? 1440 : unit === 'hours' ? 60 : 1;
         const key = amount + ':' + unit;
         if (!reminders.some((r) => r.key === key)) reminders.push({ amount: amount / factor, unit, key });
+      } else if (minutes > 0) {
+        warnings.push('Напоминание после начала события «' + summary + '» не импортировано.');
       }
     }
     const uidProp = first(props, 'UID');
