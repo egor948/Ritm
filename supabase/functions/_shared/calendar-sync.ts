@@ -16,25 +16,31 @@ function encodeBase64(value: Uint8Array): string {
   return btoa(binary);
 }
 
+function toArrayBuffer(value: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(value.byteLength);
+  copy.set(value);
+  return copy.buffer;
+}
+
 async function encryptionKey() {
   const raw = decodeBase64(env('CALENDAR_ENCRYPTION_KEY'));
   if (raw.length !== 32) throw new Error('Серверное шифрование календарей не настроено.');
-  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  return crypto.subtle.importKey('raw', toArrayBuffer(raw), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
 export async function encryptCalendarUrl(url: string) {
   const key = await encryptionKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoder.encode(url));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: toArrayBuffer(iv) }, key, encoder.encode(url));
   return { encryptedUrl: encodeBase64(new Uint8Array(encrypted)), urlIv: encodeBase64(iv) };
 }
 
 export async function decryptCalendarUrl(encryptedUrl: string, urlIv: string) {
   const key = await encryptionKey();
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: decodeBase64(urlIv) },
+    { name: 'AES-GCM', iv: toArrayBuffer(decodeBase64(urlIv)) },
     key,
-    decodeBase64(encryptedUrl),
+    toArrayBuffer(decodeBase64(encryptedUrl)),
   );
   const url = decoder.decode(decrypted);
   return validateGoogleCalendarUrl(url);
