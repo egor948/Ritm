@@ -66,6 +66,38 @@ export function ring({ key, pct, size = 56, stroke = 8, color = 'blue', center, 
   return h('div', { class: 'ring ' + cls, style: { width: size + 'px', height: size + 'px', '--c': cv(color) } }, svg, center != null ? h('div', { class: 'ring-c' }, center) : null);
 }
 
+// Preserve the user's scroll position when a selection redraws its editor or screen.
+function preserveControlScroll(element, action) {
+  const saved = [];
+  let node = element;
+  while (node && node !== document.body) {
+    if (node.matches && node.matches('.sheet-body, .scroll, .fixed-body')) {
+      const owner = node.closest('.screen, .layer');
+      saved.push({
+        node, top: node.scrollTop, left: node.scrollLeft,
+        owner, ownerType: owner?.classList.contains('layer') ? 'layer' : 'screen',
+        screenId: owner?.dataset.screen || null,
+      });
+    }
+    node = node.parentElement;
+  }
+  action();
+  const restore = () => {
+    for (const item of saved) {
+      let target = item.node.isConnected ? item.node : null;
+      if (!target && item.ownerType === 'layer' && item.owner?.isConnected) target = item.owner.querySelector('.scroll');
+      if (!target && item.ownerType === 'screen' && item.screenId) {
+        target = document.querySelector(`.screen[data-screen="${item.screenId}"] .scroll`);
+      }
+      if (!target) continue;
+      target.scrollTop = item.top;
+      target.scrollLeft = item.left;
+    }
+  };
+  requestAnimationFrame(() => { restore(); requestAnimationFrame(restore); });
+  [0, 70, 180, 360, 600].forEach((delay) => setTimeout(restore, delay));
+}
+
 // ---------------------------------------------------------------- сегментированный контрол
 const segPrev = new Map();
 export function seg({ key, options, value, onChange, cls = '' }) {
@@ -84,7 +116,7 @@ export function seg({ key, options, value, onChange, cls = '' }) {
         el.style.setProperty('--i', i);
         if (key != null) segPrev.set(key, i);
         [...el.querySelectorAll('.seg-btn')].forEach((b, j) => b.classList.toggle('on', j === i));
-        onChange(o.v);
+        preserveControlScroll(el, () => onChange(o.v));
       },
     }, o.label)));
   if (prev !== idx) requestAnimationFrame(() => requestAnimationFrame(() => el.style.setProperty('--i', idx)));
@@ -93,7 +125,7 @@ export function seg({ key, options, value, onChange, cls = '' }) {
 
 // ---------------------------------------------------------------- переключатель
 export function toggle(value, onChange) {
-  return h('input', { type: 'checkbox', class: 'switch', checked: !!value, onchange: (e) => onChange(e.target.checked) });
+  return h('input', { type: 'checkbox', class: 'switch', checked: !!value, onchange: (e) => preserveControlScroll(e.currentTarget, () => onChange(e.target.checked)) });
 }
 
 // ---------------------------------------------------------------- чекбокс
@@ -385,7 +417,7 @@ export function timeInput(value, onChange, { clearable = true } = {}) {
   return wrap;
 }
 export function selectInput(options, value, onChange) {
-  const sel = h('select', { class: 'inp sel', onchange: (e) => { const o = options[e.target.selectedIndex]; onChange(o.v); } },
+  const sel = h('select', { class: 'inp sel', onchange: (e) => { const o = options[e.target.selectedIndex]; preserveControlScroll(e.currentTarget, () => onChange(o.v)); } },
     options.map((o) => h('option', { value: String(o.v) }, o.label)));
   const i = options.findIndex((o) => o.v === value);
   sel.selectedIndex = i >= 0 ? i : 0;
@@ -420,8 +452,8 @@ export function pills({ options, value, multi = false, onChange, cls = '' }) {
   const el = h('div', { class: 'pills ' + cls, 'data-no-scroll-restore': true }, options.map((o) => h('button', {
     type: 'button', class: 'pill' + (sel.has(o.v) ? ' on' : ''), style: o.color ? { '--c': cv(o.color) } : null,
     onclick: (e) => {
-      if (multi) { sel.has(o.v) ? sel.delete(o.v) : sel.add(o.v); e.currentTarget.classList.toggle('on'); onChange([...sel]); }
-      else { sel.clear(); sel.add(o.v); el.querySelectorAll('.pill').forEach((p) => p.classList.remove('on')); e.currentTarget.classList.add('on'); onChange(o.v); }
+      if (multi) { sel.has(o.v) ? sel.delete(o.v) : sel.add(o.v); e.currentTarget.classList.toggle('on'); preserveControlScroll(el, () => onChange([...sel])); }
+      else { sel.clear(); sel.add(o.v); el.querySelectorAll('.pill').forEach((p) => p.classList.remove('on')); e.currentTarget.classList.add('on'); preserveControlScroll(el, () => onChange(o.v)); }
     },
   }, o.label)));
   return el;
@@ -429,7 +461,7 @@ export function pills({ options, value, multi = false, onChange, cls = '' }) {
 export function stepper(value, onChange, { min = 0, max = 99999, step = 1, format = (v) => v } = {}) {
   const out = h('span', { class: 'step-val' }, format(value));
   let v = value;
-  const set = (n) => { v = clamp(n, min, max); out.textContent = format(v); onChange(v); };
+  const set = (n) => { v = clamp(n, min, max); out.textContent = format(v); preserveControlScroll(out, () => onChange(v)); };
   return h('div', { class: 'stepper' },
     h('button', { type: 'button', onclick: () => set(v - step), 'aria-label': 'Меньше' }, ic('minus', 18)), out,
     h('button', { type: 'button', onclick: () => set(v + step), 'aria-label': 'Больше' }, ic('plus', 18)));
