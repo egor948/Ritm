@@ -38,37 +38,73 @@ function persistWidgetOrder(grid) {
 }
 
 function bindWidgetDrag(card, grid) {
-  const handle = card.querySelector('.widget-edit-handle');
-  if (!handle) return;
   let pointerId = null;
-  let moved = false;
-  handle.addEventListener('pointerdown', (event) => {
+  let holdTimer = null;
+  let startX = 0, startY = 0;
+  let dragging = false, moved = false, suppressClick = false;
+
+  card.addEventListener('pointerdown', (event) => {
     if (pointerId != null || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    if (event.target.closest('.widget-edit-remove')) return;
     pointerId = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+    dragging = false;
     moved = false;
-    card.classList.add('dragging');
-    try { handle.setPointerCapture(pointerId); } catch (_) {}
-    event.preventDefault();
+    holdTimer = setTimeout(() => {
+      if (pointerId !== event.pointerId) return;
+      dragging = true;
+      card.classList.add('dragging');
+      try { card.setPointerCapture(pointerId); } catch (_) {}
+    }, 190);
   });
-  handle.addEventListener('pointermove', (event) => {
+
+  card.addEventListener('pointermove', (event) => {
     if (event.pointerId !== pointerId) return;
+    if (!dragging) {
+      if (Math.hypot(event.clientX - startX, event.clientY - startY) > 10) {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+      return;
+    }
+    event.preventDefault();
     const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('.widget-edit-card');
     if (!target || target === card || target.parentElement !== grid) return;
     const rect = target.getBoundingClientRect();
-    const after = event.clientY > rect.top + rect.height / 2
-      || (Math.abs(event.clientY - (rect.top + rect.height / 2)) < rect.height * 0.2 && event.clientX > rect.left + rect.width / 2);
-    grid.insertBefore(card, after ? target.nextSibling : target);
-    moved = true;
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const horizontal = Math.abs(event.clientX - cx) > Math.abs(event.clientY - cy);
+    const after = horizontal ? event.clientX > cx : event.clientY > cy;
+    const nextSibling = after ? target.nextElementSibling : target;
+    if (nextSibling !== card && nextSibling !== card.nextElementSibling) {
+      grid.insertBefore(card, nextSibling || null);
+      moved = true;
+    }
   });
+
   const finish = (event) => {
     if (event.pointerId !== pointerId) return;
+    clearTimeout(holdTimer);
+    holdTimer = null;
     card.classList.remove('dragging');
+    if (dragging && moved) {
+      suppressClick = true;
+      persistWidgetOrder(grid);
+      setTimeout(() => { suppressClick = false; }, 500);
+    }
     pointerId = null;
-    if (moved) persistWidgetOrder(grid);
+    dragging = false;
   };
-  handle.addEventListener('pointerup', finish);
-  handle.addEventListener('pointercancel', finish);
-  handle.addEventListener('lostpointercapture', finish);
+  card.addEventListener('pointerup', finish);
+  card.addEventListener('pointercancel', finish);
+  card.addEventListener('lostpointercapture', finish);
+  card.addEventListener('click', (event) => {
+    if (!suppressClick) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressClick = false;
+  }, true);
 }
 
 function openWidgetPicker() {
@@ -117,7 +153,6 @@ function makeWidgetCard(widget, index, ctx, grid) {
   if (!content || !widgetsEditMode) return content;
   const card = h('div', { class: 'widget-edit-card' + (WIDE.has(widget.id) ? ' wide' : ''), 'data-widget-id': widget.id },
     h('div', { class: 'widget-edit-tools' },
-      h('button', { type: 'button', class: 'widget-edit-handle', 'aria-label': 'Переместить виджет ' + (TITLES[widget.id]?.[0] || widget.id) }, ic('drag', 18)),
       h('button', { type: 'button', class: 'widget-edit-remove', 'aria-label': 'Удалить виджет ' + (TITLES[widget.id]?.[0] || widget.id), onclick: (event) => {
         event.stopPropagation();
         S.setSettings({ widgets: S.settings().widgets.map((item) => item.id === widget.id ? { ...item, on: false } : item) });
