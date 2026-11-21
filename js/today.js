@@ -88,9 +88,9 @@ function bindWidgetDrag(card, grid) {
     clearTimeout(holdTimer);
     holdTimer = null;
     card.classList.remove('dragging');
-    if (dragging && moved) {
+    if (dragging) {
       suppressClick = true;
-      persistWidgetOrder(grid);
+      if (moved) persistWidgetOrder(grid);
       setTimeout(() => { suppressClick = false; }, 500);
     }
     pointerId = null;
