@@ -226,7 +226,7 @@ function monthCard(x, data, api) {
     h('div', { class: 'mc-head' },
       h('button', { class: 'icon-btn', 'aria-label': 'Предыдущий месяц', onclick: () => { detailMonth = addMonths(first, -1); api.refresh(); } }, ic('chevL', 20)),
       h('b', null, `${MONTHS_NOM[parseYmd(first).getMonth()]} ${first.slice(0, 4)}`),
-      h('button', { class: 'icon-btn', 'aria-label': 'Следующий месяц', onclick: () => { detailMonth = addMonths(first, 1); api.refresh(); }, disabled: first >= addMonths(monthStart(today), 1) }, ic('chevR', 20))),
+      h('button', { class: 'icon-btn', 'aria-label': 'Следующий месяц', onclick: () => { detailMonth = addMonths(first, 1); api.refresh(); }, disabled: false }, ic('chevR', 20))),
     h('div', { class: 'mc-wd' }, wd.map((w) => h('span', null, w))),
     h('div', { class: 'mc-grid' }, cells),
     h('div', { class: 'hint tight center' }, x.type === 'check' ? 'Нажмите на день, чтобы отметить или снять отметку' : 'Нажмите на день, чтобы изменить значение'));
