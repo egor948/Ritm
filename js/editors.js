@@ -506,7 +506,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
         group(
           row('Весь день', toggle(d.allDay, (v) => { d.allDay = v; redraw(); }), { icon: 'sun', iconColor: 'orange' }),
           row(d.allDay ? 'Начало' : 'Дата', eventDateControl, { icon: 'calendar', iconColor: 'red' }),
-          d.allDay ? row('Конец', dateInput(d.endDate, (v) => (d.endDate = v))) : null,
+          d.allDay ? row('Конец', dateInput(d.endDate, (v) => (d.endDate = v)), { icon: 'calendar', iconColor: 'red' }) : null,
           !d.allDay ? row('Начало', timeInput(d.start, (v) => { d.start = v; if (v && (!d.end || toMin(d.end) <= toMin(v))) { d.end = fromMin(Math.min(1439, toMin(v) + 60)); endTimeControl.querySelector('input').value = d.end; } }, { clearable: false }), { icon: 'clock', iconColor: 'blue' }) : null,
           !d.allDay ? row('Конец', endTimeControl, { icon: 'clock', iconColor: 'blue' }) : null),
         groupTitle('Календарь'),
