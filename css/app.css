@@ -1076,7 +1076,7 @@ small { font-size: 12px; }
 }
 
 /* Dashboard widget editing, directly on the Today screen */
-.widget-edit-card { position: relative; min-width: 0; border-radius: 27px; touch-action: pan-y; }
+.widget-edit-card { position: relative; min-width: 0; border-radius: 27px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 .widget-edit-card.wide { grid-column: 1 / -1; }
 .widget-edit-card > .widget { height: 100%; box-sizing: border-box; }
 .widget-edit-tools {
@@ -1089,7 +1089,6 @@ small { font-size: 12px; }
   -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
   box-shadow: 0 1px 5px rgba(0,0,0,.10), inset 0 0 0 .5px var(--sep);
 }
-.widget-edit-handle { cursor: grab; touch-action: none; }
 .widget-edit-remove { color: var(--c-red); }
 .widget-edit-card.dragging { opacity: .56; outline: 2px dashed var(--accent); outline-offset: 3px; z-index: 5; }
 .widget-edit-card.dragging > .widget { box-shadow: 0 12px 30px rgba(0,0,0,.14); }
