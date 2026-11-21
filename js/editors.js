@@ -348,9 +348,12 @@ const EVENT_REMINDER_UNITS = [
   { v: 'weeks', label: 'Недели', factor: 10080 },
 ];
 const EVENT_REMINDER_FACTORS = Object.fromEntries(EVENT_REMINDER_UNITS.map((unit) => [unit.v, unit.factor]));
+const EVENT_REMINDER_MAX = { minutes: 60, hours: 24, days: 7, weeks: 4 };
+const eventReminderAmountMax = (unit) => EVENT_REMINDER_MAX[unit] || 60;
+const clampEventReminderAmount = (amount, unit) => Math.max(1, Math.min(eventReminderAmountMax(unit), Math.round(Number(amount) || 1)));
 
 function reminderUnitForMinutes(minutes) {
-  if (minutes === 0) return { amount: 0, unit: 'minutes' };
+  if (minutes <= 0) return { amount: 1, unit: 'minutes' };
   for (const unit of [...EVENT_REMINDER_UNITS].reverse()) {
     if (minutes % unit.factor === 0) return { amount: minutes / unit.factor, unit: unit.v };
   }
@@ -360,7 +363,7 @@ function reminderUnitForMinutes(minutes) {
 // Переводит старые абсолютные напоминания мероприятий в относительные интервалы.
 function normalizeEventReminder(reminder, event) {
   if (reminder && EVENT_REMINDER_FACTORS[reminder.unit] && reminder.amount != null) {
-    return { id: reminder.id || uid(), amount: Number(reminder.amount), unit: reminder.unit };
+    return { id: reminder.id || uid(), amount: clampEventReminderAmount(reminder.amount, reminder.unit), unit: reminder.unit };
   }
   if (!reminder?.date || !reminder?.time || !event?.date) return null;
   const startTime = event.allDay || !event.start ? '09:00' : event.start;
@@ -390,8 +393,9 @@ function eventRemindersError(reminders) {
   const seen = new Set();
   for (const reminder of reminders || []) {
     const amount = Number(reminder.amount);
-    if (reminder.amount == null || reminder.amount === '' || !Number.isInteger(amount) || amount < 0 || amount > 9999 || !EVENT_REMINDER_FACTORS[reminder.unit]) {
-      return 'Укажите целое количество от 0 до 9999 и единицу времени';
+    const max = eventReminderAmountMax(reminder.unit);
+    if (reminder.amount == null || reminder.amount === '' || !Number.isInteger(amount) || amount < 1 || amount > max || !EVENT_REMINDER_FACTORS[reminder.unit]) {
+      return `Для выбранной единицы укажите число от 1 до ${max}`;
     }
     const total = amount * EVENT_REMINDER_FACTORS[reminder.unit];
     if (seen.has(total)) return 'Уберите повторяющиеся напоминания';
@@ -408,12 +412,24 @@ function eventRemindersGroup(d) {
   const makeCard = (reminder) => {
     reminder.id = reminder.id || uid();
     if (!EVENT_REMINDER_FACTORS[reminder.unit]) reminder.unit = 'minutes';
-    if (reminder.amount == null) reminder.amount = 5;
-    const unit = selectInput(EVENT_REMINDER_UNITS.map(({ v, label }) => ({ v, label })), reminder.unit, (v) => { reminder.unit = v; });
-    const amount = numberInput(reminder.amount, (v) => { reminder.amount = v; }, { placeholder: '5', step: '1', width: '100%' });
-    amount.min = '0';
-    amount.max = '9999';
-    amount.setAttribute('aria-label', 'Количество');
+    reminder.amount = clampEventReminderAmount(reminder.amount == null ? 5 : reminder.amount, reminder.unit);
+    let amount;
+    const makeAmountControl = () => {
+      const max = eventReminderAmountMax(reminder.unit);
+      const options = Array.from({ length: max }, (_, index) => ({ v: index + 1, label: String(index + 1) }));
+      const control = selectInput(options, reminder.amount, (v) => { reminder.amount = Number(v); });
+      control.classList.add('reminder-amount');
+      control.setAttribute('aria-label', 'Количество');
+      return control;
+    };
+    amount = makeAmountControl();
+    const unit = selectInput(EVENT_REMINDER_UNITS.map(({ v, label }) => ({ v, label })), reminder.unit, (v) => {
+      reminder.unit = v;
+      reminder.amount = clampEventReminderAmount(reminder.amount, v);
+      const nextAmount = makeAmountControl();
+      amount.replaceWith(nextAmount);
+      amount = nextAmount;
+    });
     unit.setAttribute('aria-label', 'Единица времени');
 
     const card = h('div', { class: 'reminder-card' },
@@ -582,6 +598,12 @@ export function editHabit(habit, defaults = {}) {
 // =====================================================================
 // Цель / подцель
 // =====================================================================
+function progressModeDescription(mode) {
+  if (mode === 'metric') return 'Укажите начальное значение, текущий результат и цель. Ритм покажет, какую часть пути вы уже прошли. Например: пробежать от 0 до 150 км или изменить вес с 90 до 80 кг.';
+  if (mode === 'weight') return 'Задачам можно назначить важность от 1 до 10. Выполнение важной задачи с весом 10 продвинет цель сильнее, чем небольшой задачи с весом 1. Выбирайте этот способ, если шаги имеют разную значимость.';
+  return 'Ритм считает долю выполненных задач цели и её подцелей. Например, если из 10 шагов выполнены 4, прогресс составит 40%. Подходит, когда все шаги одинаково важны.';
+}
+
 export function editGoal(goal, defaults = {}) {
   const isNew = !goal;
   const data = S.data();
@@ -617,6 +639,14 @@ export function editGoal(goal, defaults = {}) {
     },
     draw(body, d, redraw, api) {
       const m = d.metric;
+      const progressNote = h('div', { class: 'group-note' }, progressModeDescription(d.progressMode));
+      const metricFields = group(
+        row('Начальное значение', numberInput(m.start, (v) => (m.start = v), { width: '110px' })),
+        row('Сейчас', numberInput(m.current, (v) => (m.current = v), { width: '110px' })),
+        row('Цель', numberInput(m.target, (v) => (m.target = v), { width: '110px' })),
+        row('Единица', textInput({ value: m.unit, placeholder: 'км, ₽, кг…', onInput: (v) => (m.unit = v) })),
+      );
+      metricFields.style.display = d.progressMode === 'metric' ? '' : 'none';
       body.append(
         group(h('div', { class: 'row solo' }, textInput({ value: d.title, placeholder: isSub ? 'Название подцели' : 'Чего вы хотите достичь?', big: true, onInput: (v) => (d.title = v), autofocus: isNew }))),
         group(h('div', { class: 'row col' }, emojiPicker(d.emoji, (v) => (d.emoji = v))), h('div', { class: 'row' }, colorPicker(d.color, (v) => (d.color = v)))),
@@ -628,13 +658,17 @@ export function editGoal(goal, defaults = {}) {
             row('Срок', dateInput(d.deadline, (v) => (d.deadline = v)), { icon: 'flag', iconColor: 'red' })),
         ] : null,
         groupTitle('Как считать прогресс'),
-        group(h('div', { class: 'row' }, seg({ options: [{ v: 'tasks', label: 'По задачам' }, { v: 'weight', label: 'По весу' }, { v: 'metric', label: 'Метрика' }], value: d.progressMode || 'tasks', onChange: (v) => { d.progressMode = v; redraw(); } }))),
-        h('div', { class: 'group-note' }, d.progressMode === 'metric' ? 'Укажите начальное значение, текущий результат и цель. Ритм покажет, какую часть пути вы уже прошли. Например: пробежать от 0 до 150 км или изменить вес с 90 до 80 кг.' : d.progressMode === 'weight' ? 'Задачам можно назначить важность от 1 до 10. Выполнение важной задачи с весом 10 продвинет цель сильнее, чем небольшой задачи с весом 1. Выбирайте этот способ, если шаги имеют разную значимость.' : 'Ритм считает долю выполненных задач цели и её подцелей. Например, если из 10 шагов выполнены 4, прогресс составит 40%. Подходит, когда все шаги одинаково важны.'),
-        d.progressMode === 'metric' ? group(
-          row('Начальное значение', numberInput(m.start, (v) => (m.start = v), { width: '110px' })),
-          row('Сейчас', numberInput(m.current, (v) => (m.current = v), { width: '110px' })),
-          row('Цель', numberInput(m.target, (v) => (m.target = v), { width: '110px' })),
-          row('Единица', textInput({ value: m.unit, placeholder: 'км, ₽, кг…', onInput: (v) => (m.unit = v) }))) : null,
+        group(h('div', { class: 'row' }, seg({
+          options: [{ v: 'tasks', label: 'По задачам' }, { v: 'weight', label: 'По весу' }, { v: 'metric', label: 'Метрика' }],
+          value: d.progressMode || 'tasks',
+          onChange: (v) => {
+            d.progressMode = v;
+            progressNote.textContent = progressModeDescription(v);
+            metricFields.style.display = v === 'metric' ? '' : 'none';
+          },
+        }))),
+        progressNote,
+        metricFields,
         group(h('div', { class: 'row solo' }, textInput({ value: d.notes, placeholder: 'Заметки: зачем эта цель, как поймёте, что достигли', multiline: true, onInput: (v) => (d.notes = v) }))),
         !isNew ? group(h('button', { class: 'row-btn', onclick: () => { S.upsert('goals', { id: goal.id, archived: !goal.archived }); toast(goal.archived ? 'Цель возвращена' : 'Цель в архиве'); document.dispatchEvent(new CustomEvent('goal-deleted', { detail: goal.id })); api.close(true); } }, goal.archived ? 'Вернуть из архива' : 'Архивировать')) : null,
       );
