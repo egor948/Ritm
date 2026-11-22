@@ -106,7 +106,10 @@ function bindWidgetDrag(card, grid) {
     const useHorizontalSide = !target.classList.contains('wide')
       && Math.abs(x - centerX) > Math.abs(y - centerY);
     const after = useHorizontalSide ? x > centerX : y > centerY;
-    const anchor = after ? target.nextElementSibling : target;
+    let anchor = after ? target.nextElementSibling : target;
+    // Исходный элемент тоже остаётся в DOM (скрытым и вне потока), поэтому
+    // не используем его как точку вставки для placeholder.
+    if (anchor === card) anchor = card.nextElementSibling;
 
     if (anchor === placeholder || (!after && placeholder.nextElementSibling === target)) return;
     if (after && target.nextElementSibling === placeholder) return;
