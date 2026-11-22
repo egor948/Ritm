@@ -119,10 +119,10 @@ PWA не может создавать виджеты на главном экр
    - включите Email и отключите **Confirm email**, чтобы регистрация сразу создавала сессию без письма подтверждения;
    - включите Google и укажите OAuth Client ID и Client Secret из Google Cloud.
 4. **URL авторизации.** Authentication → URL Configuration:
-   - Site URL: `https://egor948.github.io/Ritm/`;
-   - Redirect URLs: добавьте `https://egor948.github.io/Ritm/` и `https://egor948.github.io/Ritm/**`.
-   - Для восстановления пароля Redirect URL должен вести на `https://egor948.github.io/Ritm/`, а не на корень `https://egor948.github.io/`.
-   В Google Cloud в Authorized redirect URIs укажите callback Supabase: `https://buwdepheklyrrzofkinm.supabase.co/auth/v1/callback`.
+   - Site URL: `https://zritm.github.io/Ritm/`;
+   - Redirect URLs: добавьте `https://zritm.github.io/Ritm/` и `https://zritm.github.io/Ritm/**`.
+   - Для восстановления пароля Redirect URL должен вести на `https://zritm.github.io/Ritm/`, а не на корень `https://zritm.github.io/`.
+   В Google Cloud в **Authorized JavaScript origins** добавьте `https://zritm.github.io` (без `/Ritm/`). В **Authorized redirect URIs** оставьте callback Supabase: `https://buwdepheklyrrzofkinm.supabase.co/auth/v1/callback` — он не меняется при смене адреса сайта.
 5. **Ключи для push.** Выполните на компьютере (нужен Node.js): `npx web-push generate-vapid-keys`. Получите публичный и приватный ключи.
 6. **Конфиг приложения.** Откройте `config.js` и впишите `SUPABASE_URL`, `SUPABASE_ANON_KEY` и публичный `VAPID_PUBLIC_KEY`. Загрузите обновлённые файлы на хостинг.
 7. **Функция отправки.** Установите [Supabase CLI](https://supabase.com/docs/guides/cli), затем:
