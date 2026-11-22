@@ -10,6 +10,29 @@ const isStandalone = () => window.matchMedia('(display-mode: standalone)').match
 let subscribed = false;
 let hint = '';
 let localTimers = [];
+let localScheduleRun = 0;
+let serverDeliveryCache = { key: '', until: 0, active: false };
+
+async function hasServerDelivery(registration) {
+  const session = Sync.getSession();
+  if (!CONFIG.VAPID_PUBLIC_KEY || !Sync.configured() || !session?.userId) return false;
+  const sub = await registration.pushManager.getSubscription();
+  if (!sub) return false;
+  const key = `${session.userId}:${sub.endpoint}`;
+  if (serverDeliveryCache.key === key && serverDeliveryCache.until > Date.now()) return serverDeliveryCache.active;
+  let active = false;
+  try {
+    const rows = await Sync.restCall(
+      `push_subscriptions?select=endpoint&user_id=eq.${encodeURIComponent(session.userId)}&endpoint=eq.${encodeURIComponent(sub.endpoint)}&limit=1`,
+    );
+    active = Array.isArray(rows) && rows.some((row) => row.endpoint === sub.endpoint);
+  } catch (_) {
+    // При проблемах с сетью сохраняем локальное напоминание как резерв.
+    active = false;
+  }
+  serverDeliveryCache = { key, until: Date.now() + 45000, active };
+  return active;
+}
 
 export function state() {
   const supported = 'serviceWorker' in navigator && 'Notification' in window && 'PushManager' in window;
@@ -47,6 +70,7 @@ export async function enable() {
           method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
           body: { user_id: Sync.getSession().userId, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth },
         });
+        serverDeliveryCache = { key: '', until: 0, active: false };
         Sync.pushReminders().catch(() => {});
       }
     }
@@ -70,6 +94,8 @@ export async function disable() {
     }
   } catch (_) { /* ok */ }
   subscribed = false;
+  localScheduleRun++;
+  serverDeliveryCache = { key: '', until: 0, active: false };
   localTimers.forEach(clearTimeout); localTimers = [];
   toast('Уведомления выключены');
 }
@@ -82,9 +108,18 @@ export async function test() {
 }
 
 /** Локальные напоминания на ближайшие 12 часов: работают, пока приложение открыто или в фоне. */
-export function scheduleLocal() {
+export async function scheduleLocal() {
+  const run = ++localScheduleRun;
   localTimers.forEach(clearTimeout); localTimers = [];
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const registration = await reg().catch(() => null);
+  if (!registration || run !== localScheduleRun) return;
+
+  // Если этот браузер зарегистрирован в серверной очереди, доставку выполняет сервер.
+  // Локальные таймеры остаются резервом для гостевого режима и устройств без подписки.
+  if (await hasServerDelivery(registration)) return;
+  if (run !== localScheduleRun) return;
+
   const d = S.data();
   const now = new Date();
   const list = buildReminders(d, d.idx, now, 2, S.settings().defaultRemindAt || '09:00');
@@ -102,6 +137,7 @@ export function start() {
   const again = debounce(scheduleLocal, 1500);
   S.subscribe(again);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleLocal(); });
+  window.addEventListener('online', () => scheduleLocal());
   scheduleLocal();
 }
 void localDate;
