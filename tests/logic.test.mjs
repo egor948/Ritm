@@ -301,6 +301,25 @@ test('несколько независимых напоминаний зада�
   assert.equal(new Date(reminders[3].fireAt).getTime(), new Date(2026, 10, 18, 19, 45).getTime());
 });
 
+test('напоминания задачи: одинаковое время не дублируется, после срока не отправляется', () => {
+  const now = new Date(2026, 10, 15, 12, 0, 0);
+  const data = {
+    events: [],
+    tasks: [{
+      id: 'due-task', title: 'Сдать отчёт', date: '2026-11-16', time: '12:00', done: false,
+      reminders: [
+        { id: 'early-a', date: '2026-11-16', time: '11:30' },
+        { id: 'early-b', date: '2026-11-16', time: '11:30' },
+        { id: 'at-due', date: '2026-11-16', time: '12:00' },
+        { id: 'after-due', date: '2026-11-16', time: '12:01' },
+      ],
+    }],
+    habits: [], goals: [],
+  };
+  const reminders = L.buildReminders(data, new Map(), now, 3);
+  assert.deepEqual(reminders.map((item) => item.id), ['tkr:due-task:early-a']);
+});
+
 test('независимые напоминания сохраняются даже без даты задачи и не отправляются после выполнения', () => {
   const now = new Date(2026, 10, 15, 12, 0, 0);
   const task = { id: 't', title: 'Задача', done: false, reminders: [{ id: 'r', date: '2026-11-15', time: '13:00' }] };
