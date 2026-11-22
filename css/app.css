@@ -1097,8 +1097,7 @@ small { font-size: 12px; }
 .widget-edit-preview {
   position: fixed !important;
   z-index: 10000 !important;
-  display: flex !important;
-  align-items: stretch;
+  display: block !important;
   box-sizing: border-box;
   margin: 0 !important;
   pointer-events: none !important;
