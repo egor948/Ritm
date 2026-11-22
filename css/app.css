@@ -1090,8 +1090,35 @@ small { font-size: 12px; }
   box-shadow: 0 1px 5px rgba(0,0,0,.10), inset 0 0 0 .5px var(--sep);
 }
 .widget-edit-remove { color: var(--c-red); }
-.widget-edit-card.dragging { opacity: .56; outline: 2px dashed var(--accent); outline-offset: 3px; z-index: 5; }
-.widget-edit-card.dragging > .widget { box-shadow: 0 12px 30px rgba(0,0,0,.14); }
+.widget-edit-card.dragging {
+  position: fixed !important;
+  z-index: 10000 !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+  outline: 0 !important;
+  cursor: grabbing;
+  will-change: left, top, transform;
+  transform: scale(1.035);
+  filter: saturate(1.04);
+}
+.widget-edit-card.dragging > .widget {
+  box-shadow: 0 20px 48px rgba(0,0,0,.22), 0 5px 14px rgba(0,0,0,.10);
+}
+.widget-drag-placeholder {
+  min-width: 0;
+  min-height: 158px;
+  box-sizing: border-box;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 58%, var(--sep));
+  border-radius: 27px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.24), 0 3px 12px color-mix(in srgb, var(--accent) 9%, transparent);
+  transform-origin: center;
+  pointer-events: none;
+}
+.widget-drag-placeholder.wide { grid-column: 1 / -1; }
+@media (prefers-reduced-motion: reduce) {
+  .widget-edit-card.dragging { transform: none; }
+}
 .widget-add-tile {
   min-height: 150px; border: 1.5px dashed color-mix(in srgb, var(--accent) 48%, var(--sep));
   border-radius: 24px; display: flex; flex-direction: column; align-items: center;
