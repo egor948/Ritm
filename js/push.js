@@ -15,7 +15,7 @@ let serverDeliveryCache = { key: '', until: 0, active: false };
 
 async function hasServerDelivery(registration) {
   const session = Sync.getSession();
-  if (!CONFIG.VAPID_PUBLIC_KEY || !Sync.configured() || !session?.userId) return false;
+  if (!('PushManager' in window) || !CONFIG.VAPID_PUBLIC_KEY || !Sync.configured() || !session?.userId) return false;
   const sub = await registration.pushManager.getSubscription();
   if (!sub) return false;
   const key = `${session.userId}:${sub.endpoint}`;
