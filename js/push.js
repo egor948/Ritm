@@ -137,7 +137,10 @@ export function start() {
   const again = debounce(scheduleLocal, 1500);
   S.subscribe(again);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleLocal(); });
-  window.addEventListener('online', () => scheduleLocal());
+  window.addEventListener('online', () => {
+    serverDeliveryCache = { key: '', until: 0, active: false };
+    scheduleLocal();
+  });
   scheduleLocal();
 }
 void localDate;
