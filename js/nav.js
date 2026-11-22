@@ -15,5 +15,4 @@ export const view = {
   habitsTab: 'today',
   goalsCategory: 'all',
   goalsStatus: 'all',
-  goalsStatus: 'all',
 };
