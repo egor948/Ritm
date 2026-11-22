@@ -1,8 +1,8 @@
 // Service worker: офлайн-кэш оболочки приложения и показ push-уведомлений.
-const VERSION = 'ritm-v1.0.5';
+const VERSION = 'ritm-v1.0.6';
 const SHELL = [
-  './', 'index.html', 'manifest.webmanifest', 'config.js', 'css/app.css?v=1.0.5',
-  'js/app.js?v=1.0.5', 'js/external-calendars.js', 'js/util.js', 'js/logic.js', 'js/store.js', 'js/ui.js', 'js/components.js', 'js/task-completion.js', 'js/task-swipe.js', 'js/editors.js', 'js/calendars.js', 'js/calendar-ics.js', 'js/calendar-ics-ui.js', 'js/nav.js', 'js/shell.js',
+  './', 'index.html', 'manifest.webmanifest', 'config.js', 'css/app.css?v=1.0.6',
+  'js/app.js?v=1.0.6', 'js/external-calendars.js', 'js/util.js', 'js/logic.js', 'js/store.js', 'js/ui.js', 'js/components.js', 'js/task-completion.js', 'js/task-swipe.js', 'js/editors.js', 'js/calendars.js', 'js/calendar-ics.js', 'js/calendar-ics-ui.js', 'js/nav.js', 'js/shell.js',
   'js/layers.js', 'js/goals.js', 'js/habits.js', 'js/tasks.js', 'js/today.js', 'js/calendar.js', 'js/settings.js', 'js/sync.js', 'js/push.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];

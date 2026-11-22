@@ -521,7 +521,7 @@ const RENDER = {
   },
 
   goals({ data }, i) {
-    const tops = data.goals.filter((g) => !g.parentId && !g.archived).sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+    const tops = data.goals.filter((g) => !g.parentId && !g.archived).sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999') || (Number(b.priority) || 3) - (Number(a.priority) || 3));
     const body = tops.length
       ? h('div', { class: 'hscroll goals-row' }, tops.map((g) => {
         const p = goalProgress(g, data);

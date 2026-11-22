@@ -78,6 +78,8 @@ function offerPushPromptForNewReminder() {
 }
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
+const normalizeImportance = (value) => { const n = Number(value); return Number.isFinite(n) ? Math.max(1, Math.min(5, Math.round(n))) : 3; };
+
 export function goalOptions(data, { allowNone = true, noneLabel = 'Без цели' } = {}) {
   const opts = allowNone ? [{ v: null, label: noneLabel }] : [];
   for (const g of data.goals.filter((x) => !x.parentId && !x.archived)) {
@@ -322,14 +324,13 @@ export function editTask(task, defaults = {}) {
   const isNew = !task;
   const draft = task
     ? { ...task, reminders: legacyTaskReminders(task), checklist: (task.checklist || []).map((c) => ({ ...c })) }
-    : { title: '', notes: '', goalId: null, date: null, time: null, done: false, priority: 0, weight: 1, reminderMin: null, remindAt: null, reminders: [], checklist: [], ...defaults };
+    : { title: '', notes: '', goalId: null, date: null, time: null, done: false, priority: 0, weight: 3, reminderMin: null, remindAt: null, reminders: [], checklist: [], ...defaults };
   delete draft.duration;
   const originalDate = task ? (task.date || null) : null;
   let dateWasChanged = false;
   let selectedDatePreset = draft.date === todayStr() ? 'today' : draft.date === addDays(todayStr(), 1) ? 'tomorrow' : draft.date === addDays(todayStr(), 7) ? 'week' : !draft.date ? 'none' : null;
   draft.reminders = (draft.reminders || []).map((r) => ({ ...r, id: r.id || uid() }));
   const originalReminders = reminderSnapshot(draft.reminders);
-  const goalMode = () => { const g = data.goals.find((x) => x.id === draft.goalId); if (!g) return null; const p = g.parentId && data.goals.find((x) => x.id === g.parentId); return (p && (p.progressMode === 'weight' || g.progressMode === 'weight')) || g.progressMode === 'weight' ? 'weight' : null; };
 
   return editorShell({
     title: isNew ? 'Новая задача' : 'Задача',
@@ -340,7 +341,7 @@ export function editTask(task, defaults = {}) {
           : d.reminders.some((r) => reminderIsAfterTask(r, d.date, d.time)) ? 'Напоминание не может быть позже срока задачи'
             : hasDuplicateTaskReminders(d.reminders) ? 'Уберите повторяющиеся напоминания' : null),
     onSave: (d) => {
-      const out = { ...d, title: d.title.trim(), priority: normalizePriority(d.priority), checklist: d.checklist.filter((c) => c.text.trim()) };
+      const out = { ...d, title: d.title.trim(), priority: normalizePriority(d.priority), weight: normalizeImportance(d.weight), checklist: d.checklist.filter((c) => c.text.trim()) };
       out.reminders = (out.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time }));
       out.duration = null;
       // Старые поля больше не используются после миграции в массив.
@@ -401,10 +402,10 @@ export function editTask(task, defaults = {}) {
         group(h('div', { class: 'row solo' }, textInput({ value: d.notes, placeholder: 'Заметки', multiline: true, onInput: (v) => (d.notes = v) }))),
         groupTitle('Цель'),
         group(row('Привязать к цели', selectInput(goalOptions(data), d.goalId, (v) => { d.goalId = v; redraw(); }), { icon: 'target', iconColor: 'green' })),
-        goalMode() ? group(
-        row('Вес в прогрессе', stepper(d.weight || 1, (v) => (d.weight = v), { min: 1, max: 10 }), { icon: 'flag', iconColor: 'orange' }),
-        groupNote('Чем больше вес, тем сильнее выполнение задачи двигает прогресс цели.'),
-      ) : null,
+        d.goalId ? group(
+          row('Важность для цели', stepper(d.weight || 3, (v) => (d.weight = v), { min: 1, max: 5 }), { icon: 'flag', iconColor: 'orange' }),
+          groupNote('Важность от 1 до 5 определяет, насколько выполнение задачи влияет на прогресс цели или подцели.'),
+        ) : null,
         groupTitle('Когда'),
         group(
           h('div', { class: 'row' }, datePresets),
@@ -738,7 +739,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
 export function editHabit(habit, defaults = {}) {
   const isNew = !habit;
   const draft = habit ? { ...habit, schedule: { ...(habit.schedule || { type: 'daily' }) } }
-    : { title: '', emoji: '🌱', color: 'green', type: 'check', target: 1, unit: '', schedule: { type: 'daily', days: [], perWeek: 3 }, time: null, remind: false, goalId: null, startDate: todayStr(), ...defaults };
+    : { title: '', emoji: '🌱', color: 'green', type: 'check', target: 1, unit: '', schedule: { type: 'daily', days: [], perWeek: 3 }, time: null, remind: false, goalId: null, weight: 3, startDate: todayStr(), ...defaults };
   const data = S.data();
   const originallyHadHabitReminder = !!(habit && habit.remind && habit.time);
   return editorShell({
@@ -746,9 +747,28 @@ export function editHabit(habit, defaults = {}) {
     draft,
     valid: (d) => (!d.title.trim() ? 'Введите название привычки' : d.schedule.type === 'days' && !(d.schedule.days || []).length ? 'Выберите дни недели' : null),
     onSave: (d) => {
-      const out = { ...d, title: d.title.trim() };
+      const out = { ...d, title: d.title.trim(), weight: normalizeImportance(d.weight) };
       if (out.type === 'check') { out.target = 1; out.unit = ''; }
       if (!out.time) out.remind = false;
+      const today = todayStr();
+      if (habit) {
+        const oldSchedule = habit.schedule || { type: 'daily' };
+        const nextSchedule = out.schedule || { type: 'daily' };
+        if (JSON.stringify(oldSchedule) !== JSON.stringify(nextSchedule)) {
+          const history = [...(habit.scheduleHistory || [])];
+          const from = habit.scheduleEffectiveFrom || habit.startDate || (habit.createdAt ? ymd(new Date(habit.createdAt)) : today);
+          const to = addDays(today, -1);
+          if (from <= to) history.push({ from, to, schedule: oldSchedule });
+          out.scheduleHistory = history;
+          out.scheduleEffectiveFrom = today;
+        }
+      } else {
+        out.scheduleEffectiveFrom = out.startDate || today;
+      }
+      const oldGoalId = habit ? (habit.goalId || null) : null;
+      if (out.goalId && out.goalId !== oldGoalId) out.goalLinkedAt = today;
+      else if (!out.goalId) out.goalLinkedAt = null;
+      else out.goalLinkedAt = habit ? (habit.goalLinkedAt || null) : (out.goalId ? today : null);
       S.upsert('habits', out);
     },
     afterSave: (d) => {
@@ -780,8 +800,9 @@ export function editHabit(habit, defaults = {}) {
         group(
           row('Время', timeInput(d.time, (v) => { d.time = v; }), { icon: 'clock', iconColor: 'blue' }),
           d.time ? row('Напоминать', toggle(d.remind, (v) => (d.remind = v)), { icon: 'bell', iconColor: 'orange' }) : null,
-          row('Цель', selectInput(goalOptions(data), d.goalId, (v) => (d.goalId = v)), { icon: 'target', iconColor: 'green' })),
-        groupNote('Привычку можно связать с целью — она появится на странице цели и учтётся в общей картине.'),
+          row('Цель', selectInput(goalOptions(data), d.goalId, (v) => { d.goalId = v; redraw(); }), { icon: 'target', iconColor: 'green' }),
+          d.goalId ? row('Важность для цели', stepper(d.weight || 3, (v) => (d.weight = v), { min: 1, max: 5 }), { icon: 'flag', iconColor: 'orange' }) : null),
+        groupNote('Привязанная привычка учитывается в прогрессе по своему расписанию и сроку цели. Если срока нет, привычка отображается, но не меняет общий процент.'),
         !isNew ? group(h('button', { class: 'row-btn', onclick: () => { S.upsert('habits', { id: habit.id, archived: !habit.archived }); toast(habit.archived ? 'Привычка возвращена' : 'Привычка в архиве'); api.close(true); } }, habit.archived ? 'Вернуть из архива' : 'Архивировать')) : null,
       );
     },
@@ -792,9 +813,8 @@ export function editHabit(habit, defaults = {}) {
 // Цель / подцель
 // =====================================================================
 function progressModeDescription(mode) {
-  if (mode === 'metric') return 'Укажите начальное значение, текущий результат и цель. Ритм покажет, какую часть пути вы уже прошли. Например: пробежать от 0 до 150 км или изменить вес с 90 до 80 кг.';
-  if (mode === 'weight') return 'Задачам можно назначить важность от 1 до 10. Выполнение важной задачи с весом 10 продвинет цель сильнее, чем небольшой задачи с весом 1. Выбирайте этот способ, если шаги имеют разную значимость.';
-  return 'Ритм считает долю выполненных задач цели и её подцелей. Например, если из 10 шагов выполнены 4, прогресс составит 40%. Подходит, когда все шаги одинаково важны.';
+  if (mode === 'metric') return 'Метрика добавляется к подцелям, задачам и привычкам как ещё один элемент прогресса. Её важность тоже можно настроить от 1 до 5.';
+  return 'Прогресс считается по подцелям, задачам и привычкам. У каждого элемента своя важность от 1 до 5; выполнение более важного шага сильнее влияет на общий процент.';
 }
 
 export function editGoal(goal, defaults = {}) {
@@ -803,14 +823,16 @@ export function editGoal(goal, defaults = {}) {
   const parent = goal ? data.goals.find((g) => g.id === goal.parentId) : defaults.parentId ? data.goals.find((g) => g.id === defaults.parentId) : null;
   const isSub = !!(parent || (goal && goal.parentId));
   const draft = goal
-    ? { ...goal, metric: { ...(goal.metric || { start: 0, target: 100, current: 0, unit: '' }) } }
-    : { title: '', emoji: isSub ? '🔹' : '🎯', color: parent ? parent.color : 'blue', category: '', deadline: null, progressMode: 'tasks', metric: { start: 0, target: 100, current: 0, unit: '' }, notes: '', parentId: null, ...defaults };
+    ? { ...goal, priority: goal.priority || 3, weight: goal.weight || 3, progressMode: goal.progressMode === 'metric' ? 'metric' : 'tasks', metric: { start: 0, target: 100, current: 0, unit: '', weight: 3, ...(goal.metric || {}) } }
+    : { title: '', emoji: isSub ? '🔹' : '🎯', color: parent ? parent.color : 'blue', category: '', deadline: null, priority: 3, weight: 3, progressMode: 'tasks', metric: { start: 0, target: 100, current: 0, unit: '', weight: 3 }, notes: '', parentId: null, ...defaults };
   return editorShell({
     title: isNew ? (isSub ? 'Новая подцель' : 'Новая цель') : isSub ? 'Подцель' : 'Цель',
     draft,
     valid: (d) => (!d.title.trim() ? 'Введите название' : d.progressMode === 'metric' && (d.metric.target == null || d.metric.target === d.metric.start) ? 'Укажите целевое значение, отличное от начального' : null),
     onSave: (d) => {
-      const out = { ...d, title: d.title.trim() };
+      const out = { ...d, title: d.title.trim(), priority: normalizeImportance(d.priority), weight: normalizeImportance(d.weight) };
+      out.progressMode = out.progressMode === 'metric' ? 'metric' : 'tasks';
+      if (out.metric) out.metric.weight = normalizeImportance(out.metric.weight);
       if (out.progressMode === 'metric') {
         const m = out.metric;
         m.start = Number(m.start) || 0; m.target = Number(m.target) || 0; m.current = m.current == null ? m.start : Number(m.current);
@@ -838,6 +860,7 @@ export function editGoal(goal, defaults = {}) {
         row('Сейчас', numberInput(m.current, (v) => (m.current = v), { width: '110px' })),
         row('Цель', numberInput(m.target, (v) => (m.target = v), { width: '110px' })),
         row('Единица', textInput({ value: m.unit, placeholder: 'км, ₽, кг…', onInput: (v) => (m.unit = v) })),
+        row('Важность метрики', stepper(m.weight || 3, (v) => (m.weight = v), { min: 1, max: 5 })),
       );
       metricFields.style.display = d.progressMode === 'metric' ? '' : 'none';
       body.append(
@@ -848,11 +871,18 @@ export function editGoal(goal, defaults = {}) {
           group(
             h('div', { class: 'row' }, pills({ options: CATEGORIES.map((c) => ({ v: c, label: c })), value: d.category, onChange: (v) => (d.category = v === d.category ? '' : v) })),
             row('Своя категория', textInput({ value: CATEGORIES.includes(d.category) ? '' : d.category, placeholder: 'Название', onInput: (v) => (d.category = v) })),
-            row('Срок', dateInput(d.deadline, (v) => (d.deadline = v)), { icon: 'flag', iconColor: 'red' })),
-        ] : null,
+            row('Срок', dateInput(d.deadline, (v) => (d.deadline = v)), { icon: 'flag', iconColor: 'red' }),
+            row('Приоритет цели', stepper(d.priority || 3, (v) => (d.priority = v), { min: 1, max: 5 }), { icon: 'target', iconColor: 'orange' })),
+        ] : [
+          groupTitle('Подцель'),
+          group(
+            row('Срок подцели', dateInput(d.deadline || null, (v) => (d.deadline = v)), { icon: 'calendar', iconColor: 'red' }),
+            row('Важность в цели', stepper(d.weight || 3, (v) => (d.weight = v), { min: 1, max: 5 }), { icon: 'flag', iconColor: 'orange' })),
+          groupNote('Срок можно не задавать — тогда подцель автоматически унаследует срок главной цели. Важность определяет её долю в прогрессе родительской цели.'),
+        ],
         groupTitle('Как считать прогресс'),
         group(h('div', { class: 'row' }, seg({
-          options: [{ v: 'tasks', label: 'По задачам' }, { v: 'weight', label: 'По весу' }, { v: 'metric', label: 'Метрика' }],
+          options: [{ v: 'tasks', label: 'По элементам' }, { v: 'metric', label: 'С метрикой' }],
           value: d.progressMode || 'tasks',
           onChange: (v) => {
             d.progressMode = v;

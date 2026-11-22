@@ -105,6 +105,7 @@ export function taskRow(task, data, { showGoal = true, showDate = true, compact 
     const d = task.checklist.filter((c) => c.done).length;
     meta.push(h('span', { class: 'meta' }, ic('list', 13), `${d}/${task.checklist.length}`));
   }
+  if (task.goalId) meta.push(h('span', { class: 'meta weight' }, 'Вес ' + Math.max(1, Math.min(5, Number(task.weight) || 3)) + '/5'));
   if (task.priority) meta.push(h('span', { class: 'meta prio p' + task.priority }, '!'.repeat(task.priority)));
   if ((task.reminderMin != null && task.time) || task.remindAt) meta.push(h('span', { class: 'meta' }, ic('bell', 13)));
   const popNow = popId === task.id;

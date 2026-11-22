@@ -5,62 +5,211 @@ import {
 } from './util.js';
 
 // =====================================================================
-// Цели: прогресс
+// Цели: иерархический взвешенный прогресс
 // =====================================================================
 
-export const subgoalsOf = (goals, goalId) => goals.filter((g) => g.parentId === goalId && !g.archived);
+export const subgoalsOf = (goals, goalId) => goals.filter((g) => g.parentId === goalId && !g.archived && !g.deleted);
 
-/** Все задачи цели: её собственные и задачи подцелей. */
+/** Все задачи цели и её подцелей (для сводных счётчиков интерфейса). */
 export function subtreeTasks(goalId, data) {
-  const ids = new Set([goalId, ...data.goals.filter((g) => g.parentId === goalId).map((g) => g.id)]);
-  return data.tasks.filter((t) => ids.has(t.goalId));
+  const ids = new Set([goalId, ...subgoalsOf(data.goals || [], goalId).map((g) => g.id)]);
+  return (data.tasks || []).filter((t) => ids.has(t.goalId) && !t.deleted && !t.archived);
+}
+
+const importanceWeight = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? clamp(Math.round(n), 1, 5) : 3;
+};
+
+const validDate = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+const dateOfTimestamp = (value) => value ? ymd(new Date(value)) : null;
+
+/** Возвращает собственный срок цели или ближайший срок родителя. */
+export function resolveGoalDeadline(goal, goals = []) {
+  if (!goal) return null;
+  if (goal.deadline && validDate(goal.deadline)) return goal.deadline;
+  let parent = goal.parentId ? goals.find((g) => g.id === goal.parentId && !g.deleted) : null;
+  while (parent) {
+    if (parent.deadline && validDate(parent.deadline)) return parent.deadline;
+    parent = parent.parentId ? goals.find((g) => g.id === parent.parentId && !g.deleted) : null;
+  }
+  return null;
+}
+
+function scheduleForGoalDate(habit, date) {
+  const history = (habit.scheduleHistory || []).find((entry) =>
+    entry.from && entry.from <= date && (!entry.to || date <= entry.to));
+  if (history && history.schedule) return history.schedule;
+  const effectiveFrom = habit.scheduleEffectiveFrom || habit.startDate || dateOfTimestamp(habit.createdAt) || '1970-01-01';
+  return date >= effectiveFrom ? (habit.schedule || { type: 'daily' }) : null;
+}
+
+function scheduleAllowsGoalDate(schedule, date) {
+  if (!schedule) return false;
+  if (schedule.type === 'days') return (schedule.days || []).includes(dow(date));
+  return schedule.type === 'daily';
 }
 
 /**
- * Прогресс цели или подцели.
- * Задачи и привязанные привычки влияют на общий процент. Каждая привычка
- * вносит свою долю выполнения за последние 30 дней, а задачи — 0 или 100%.
+ * Прогресс привычки в пределах срока связанной цели.
+ * Для фиксированных дней каждая запланированная дата — отдельная возможность.
+ * Для N-раз-в-неделю считается недельная квота, а лишние выполнения не дают
+ * процент сверх установленной нормы. Счётчики получают частичный прогресс.
  */
-function linkedHabitRates(goal, data, options = {}) {
-  const ids = new Set([goal.id, ...subgoalsOf(data.goals || [], goal.id).map((subgoal) => subgoal.id)]);
-  const habits = (data.habits || []).filter((habit) => !habit.archived && ids.has(habit.goalId));
-  if (!habits.length) return [];
-  const idx = data.idx || buildLogIndex(data.logs || []);
+export function habitGoalProgress(habit, goal, data, options = {}) {
+  if (!habit || habit.archived || habit.deleted) return null;
+  const deadline = resolveGoalDeadline(goal, data.goals || []);
+  if (!deadline) return null; // без срока привычка видна, но не входит в процент
+
   const today = options.today || ymd(new Date());
   const weekStartDay = options.weekStartDay ?? (data.settings && data.settings.weekStart) ?? 1;
-  const days = options.habitDays || 30;
-  return habits.map((habit) => habitRate(habit, idx, today, days, weekStartDay)).filter((rate) => rate != null);
+  const goalStart = goal.startDate || dateOfTimestamp(goal.createdAt);
+  const linkedStart = habit.goalLinkedAt || null;
+  const habitStart = habit.startDate || dateOfTimestamp(habit.createdAt);
+  const starts = [goalStart, linkedStart, habitStart].filter(validDate).sort();
+  const start = starts.length ? starts[starts.length - 1] : today;
+  if (start > deadline) return null;
+
+  const through = today < deadline ? today : deadline;
+  const idx = data.idx || buildLogIndex(data.logs || []);
+  const weeklyGroups = new Map();
+  let planned = 0;
+  let earned = 0;
+
+  for (const date of range(start, deadline)) {
+    const schedule = scheduleForGoalDate(habit, date);
+    if (!schedule) continue;
+
+    if (schedule.type === 'weekly') {
+      const key = weekStart(date, weekStartDay) + '|' + JSON.stringify(schedule);
+      let group = weeklyGroups.get(key);
+      if (!group) {
+        group = { days: 0, earned: 0, perWeek: Math.max(1, Math.min(7, Number(schedule.perWeek) || 1)) };
+        weeklyGroups.set(key, group);
+      }
+      group.days++;
+      if (date <= through) {
+        group.earned += clamp(habitValue(idx, habit, date) / habitTarget(habit), 0, 1);
+      }
+      continue;
+    }
+
+    if (!scheduleAllowsGoalDate(schedule, date)) continue;
+    planned++;
+    if (date <= through) earned += clamp(habitValue(idx, habit, date) / habitTarget(habit), 0, 1);
+  }
+
+  for (const group of weeklyGroups.values()) {
+    const quota = Math.max(1, Math.min(group.perWeek, Math.ceil(group.days * group.perWeek / 7)));
+    planned += quota;
+    earned += Math.min(quota, group.earned);
+  }
+
+  if (!planned) return null;
+  return {
+    pct: clamp(earned / planned, 0, 1),
+    planned,
+    earned,
+    deadline,
+    start,
+    weight: importanceWeight(habit.weight),
+  };
 }
-function includeHabitProgress(base, goal, data, baseWeight, options) {
-  const rates = linkedHabitRates(goal, data, options);
-  if (!rates.length) return base;
-  const habitDone = rates.reduce((sum, rate) => sum + rate, 0);
-  const habitTotal = rates.length;
-  const totalWeight = baseWeight + habitTotal;
-  const doneWeight = base.pct * baseWeight + habitDone;
-  return { ...base, pct: totalWeight ? doneWeight / totalWeight : 0,
-    habitPct: habitDone / habitTotal, habitDone, habitTotal };
+
+function metricProgress(goal) {
+  const metric = goal.metric || {};
+  const start = Number(metric.start) || 0;
+  const target = Number(metric.target) || 0;
+  const current = metric.current == null ? start : Number(metric.current);
+  const span = target - start;
+  const pct = span === 0 ? (current === target ? 1 : 0) : clamp((current - start) / span, 0, 1);
+  return { pct, done: current, total: target, unit: metric.unit || '' };
 }
+
+/**
+ * Прогресс каждого уровня считается отдельно:
+ * задачи и привычки — непосредственные элементы уровня, подцель — один
+ * взвешенный элемент родителя со своим внутренним прогрессом. Это исключает
+ * повторный учёт вложенных задач и привычек.
+ */
 export function goalProgress(goal, data, options = {}) {
-  const mode = goal.progressMode || 'tasks';
-  if (mode === 'metric' && goal.metric) {
-    const { start = 0, target = 0, current = start } = goal.metric;
-    const span = target - start;
-    const pct = span === 0 ? (current === target ? 1 : 0) : clamp((current - start) / span, 0, 1);
-    return includeHabitProgress({ pct, done: current, total: target, mode, unit: goal.metric.unit || '' }, goal, data, 1, options);
+  const goals = data.goals || [];
+  const allTasks = data.tasks || [];
+  const allHabits = data.habits || [];
+  const idx = data.idx || buildLogIndex(data.logs || []);
+  const items = [];
+  const tasks = allTasks.filter((task) => task.goalId === goal.id && !task.deleted && !task.archived);
+  const habits = allHabits.filter((habit) => habit.goalId === goal.id && !habit.archived && !habit.deleted);
+  const metric = goal.progressMode === 'metric' && goal.metric ? metricProgress(goal) : null;
+
+  if (metric) {
+    items.push({
+      id: 'metric:' + goal.id, type: 'metric', title: 'Метрика',
+      weight: importanceWeight(goal.metric.weight), pct: metric.pct,
+      metric,
+    });
   }
-  const tasks = subtreeTasks(goal.id, data);
+
+  for (const task of tasks) {
+    items.push({
+      id: task.id, type: 'task', title: task.title || 'Задача',
+      weight: importanceWeight(task.weight), pct: task.done ? 1 : 0, record: task,
+    });
+  }
+
+  let habitEarned = 0;
+  let habitPlanned = 0;
+  for (const habit of habits) {
+    const hp = habitGoalProgress(habit, goal, { ...data, idx }, options);
+    if (!hp) continue;
+    habitEarned += hp.earned;
+    habitPlanned += hp.planned;
+    items.push({
+      id: habit.id, type: 'habit', title: habit.title || 'Привычка',
+      weight: importanceWeight(habit.weight), pct: hp.pct,
+      planned: hp.planned, earned: hp.earned, deadline: hp.deadline, record: habit,
+    });
+  }
+
+  const children = subgoalsOf(goals, goal.id);
+  for (const subgoal of children) {
+    const childProgress = goalProgress(subgoal, data, options);
+    // Пустая подцель не блокирует процент до тех пор, пока в ней нет
+    // элементов, по которым можно считать выполнение.
+    if (!childProgress.hasData) continue;
+    items.push({
+      id: subgoal.id, type: 'subgoal', title: subgoal.title || 'Подцель',
+      weight: importanceWeight(subgoal.weight), pct: childProgress.pct,
+      contributionPct: 0, progress: childProgress, record: subgoal,
+    });
+  }
+
+  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+  const earnedWeight = items.reduce((sum, item) => sum + item.weight * item.pct, 0);
+  for (const item of items) {
+    item.contributionPct = totalWeight ? (item.weight * item.pct / totalWeight) * 100 : 0;
+  }
+
   const taskDone = tasks.filter((task) => task.done).length;
-  if (mode === 'weight') {
-    const totalWeight = tasks.reduce((sum, task) => sum + (task.weight || 1), 0);
-    const doneWeight = tasks.filter((task) => task.done).reduce((sum, task) => sum + (task.weight || 1), 0);
-    const base = { pct: totalWeight ? doneWeight / totalWeight : 0, done: taskDone,
-      total: tasks.length, mode, taskDone, taskTotal: tasks.length };
-    return includeHabitProgress(base, goal, data, totalWeight, options);
-  }
-  const base = { pct: tasks.length ? taskDone / tasks.length : 0, done: taskDone,
-    total: tasks.length, mode: 'tasks', taskDone, taskTotal: tasks.length };
-  return includeHabitProgress(base, goal, data, tasks.length, options);
+  return {
+    pct: totalWeight ? earnedWeight / totalWeight : 0,
+    hasData: items.length > 0,
+    done: items.filter((item) => item.pct >= 1).length,
+    total: items.length,
+    mode: metric ? 'metric' : 'weighted',
+    metric: metric || null,
+    metricDone: metric ? metric.done : null,
+    metricTotal: metric ? metric.total : null,
+    unit: metric ? metric.unit : '',
+    taskDone,
+    taskTotal: tasks.length,
+    habitDone: habitEarned,
+    habitPlanned,
+    habitTotal: items.filter((item) => item.type === 'habit').length,
+    habitPct: habitPlanned ? habitEarned / habitPlanned : 0,
+    totalWeight,
+    items,
+  };
 }
 // =====================================================================
 // Привычки

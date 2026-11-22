@@ -1223,3 +1223,9 @@ small { font-size: 12px; }
 /* В режиме редактирования содержимое виджетов нельзя активировать. */
 .widget-edit-content, .widget-edit-content * { pointer-events:none !important; }
 .widget-edit-content { user-select:none; -webkit-user-select:none; }
+
+
+/* Веса элементов и приоритет целей */
+.meta.weight { color: var(--c-orange); font-weight: 650; }
+.goal-priority { color: var(--c-orange); background: color-mix(in srgb, var(--c-orange) 12%, var(--fill)); }
+.sub-info span { display: block; line-height: 1.35; }

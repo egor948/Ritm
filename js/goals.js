@@ -1,7 +1,7 @@
 // Экран «Цели» и детальная страница цели: подцели, задачи, привычки, метрика.
 import { h, todayStr, diffDays, fmtDayMonth, plural, pct as pctOf, addDays, clear } from './util.js';
 import * as S from './store.js';
-import { goalProgress, subgoalsOf, subtreeTasks, habitStreaks, habitRate, habitDone, habitTarget } from './logic.js';
+import { goalProgress, subgoalsOf, subtreeTasks, habitStreaks, habitDone, resolveGoalDeadline } from './logic.js';
 import { ic, cv, ring, pills, emptyState, openSheet, group, row, numberInput, toast, stepper } from './ui.js';
 import { screen, navBtn } from './shell.js';
 import { openLayer, layerScreen } from './layers.js';
@@ -13,23 +13,21 @@ import { isTaskInCompletionWindow } from './task-completion.js';
 
 const expandedBlocks = new Set(); // свёрнутые подцели хранятся здесь (по умолчанию всё раскрыто)
 
-export function deadlineInfo(goal, today = todayStr()) {
-  if (!goal.deadline) return null;
-  const n = diffDays(today, goal.deadline);
-  const date = fmtDayMonth(goal.deadline);
+export function deadlineInfo(goal, today = todayStr(), data = null) {
+  const deadline = data ? resolveGoalDeadline(goal, data.goals || []) : goal.deadline;
+  if (!deadline) return null;
+  const n = diffDays(today, deadline);
+  const date = fmtDayMonth(deadline);
   if (n < 0) return { text: `${date} · просрочено на ${-n} ${plural(-n, ['день', 'дня', 'дней'])}`, tone: 'bad', n };
   if (n === 0) return { text: `${date} · сегодня`, tone: 'warn', n };
   return { text: `${date} · ${n} ${plural(n, ['день', 'дня', 'дней'])}`, tone: n <= 14 ? 'warn' : '', n };
 }
 
 export const progressLabel = (p) => {
-  if (p.mode === 'metric') {
-    const metric = fmtNum(p.done) + ' из ' + fmtNum(p.total) + (p.unit ? ' ' + p.unit : '');
-    return p.habitTotal ? metric + ' · привычки ' + Math.round(p.habitPct * 100) + '%' : metric;
-  }
-  if (p.habitTotal) return Math.round(p.pct * 100) + '% · задачи ' + (p.taskDone || 0) + '/'
-    + (p.taskTotal || 0) + ' · привычки ' + Math.round(p.habitPct * 100) + '%';
-  return p.total ? p.done + ' из ' + p.total + ' ' + plural(p.total, ['задачи', 'задач', 'задач']) : 'Нет задач';
+  if (!p.hasData) return 'Нет данных для расчёта';
+  const base = Math.round(p.pct * 100) + '% · ' + p.total + ' ' + plural(p.total, ['элемент', 'элемента', 'элементов']);
+  if (p.mode === 'metric' && p.metric) return base + ' · метрика ' + fmtNum(p.metric.done) + '/' + fmtNum(p.metric.total);
+  return base;
 };
 
 export const fmtNum = (n) => (Math.abs(n) >= 10000 ? Math.round(n).toLocaleString('ru-RU') : String(Math.round(n * 100) / 100).replace('.', ','));
@@ -58,7 +56,7 @@ export function goalsScreen() {
   };
   const shown = active.filter((goal) => view.goalsStatus === 'all' || statusOf(goal) === view.goalsStatus)
     .filter((goal) => view.goalsCategory === 'all' || goal.category === view.goalsCategory)
-    .sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+    .sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999') || (Number(b.priority) || 3) - (Number(a.priority) || 3));
   const progresses = active.map((goal) => progressById.get(goal.id).pct);
   const avg = progresses.length ? progresses.reduce((s, v) => s + v, 0) / progresses.length : 0;
 
@@ -94,7 +92,7 @@ export function goalsScreen() {
 export function goalCard(goal, data, i = 0) {
   const p = goalProgress(goal, data);
   const subs = subgoalsOf(data.goals, goal.id);
-  const dl = deadlineInfo(goal);
+  const dl = deadlineInfo(goal, todayStr(), data);
   const habits = data.habits.filter((x) => x.goalId === goal.id || subs.some((s) => s.id === x.goalId));
   return h('div', { class: 'goal-card rise pressable', style: { '--c': cv(goal.color || 'blue'), '--i': i }, onclick: () => openGoalDetail(goal.id) },
     h('div', { class: 'goal-top' },
@@ -105,9 +103,11 @@ export function goalCard(goal, data, i = 0) {
       ring({ key: 'g' + goal.id, pct: p.pct, size: 58, stroke: 10, color: goal.color || 'blue', center: h('span', { class: 'ring-pct' }, Math.round(p.pct * 100)) })),
     subs.length ? h('div', { class: 'goal-subs' }, subs.slice(0, 3).map((s) => {
       const sp = goalProgress(s, data);
-      return h('div', { class: 'sub-line' }, h('span', { class: 'sub-name' }, `${s.emoji || '•'} ${s.title}`), progressBar({ pct: sp.pct, color: s.color || goal.color || 'blue' }), h('span', { class: 'sub-pct' }, Math.round(sp.pct * 100) + '%'));
+      const item = p.items.find((entry) => entry.type === 'subgoal' && entry.id === s.id);
+      return h('div', { class: 'sub-line' }, h('span', { class: 'sub-name', title: s.title }, `${s.emoji || '•'} ${s.title} · вес ${item ? item.weight : (s.weight || 3)}/5`), progressBar({ pct: sp.pct, color: s.color || goal.color || 'blue' }), h('span', { class: 'sub-pct' }, Math.round(sp.pct * 100) + '%'));
     }), subs.length > 3 ? h('div', { class: 'sub-more' }, `ещё ${subs.length - 3}`) : null) : null,
     h('div', { class: 'goal-foot' },
+      h('span', { class: 'chip goal-priority' }, ic('target', 13), 'Приоритет ' + (goal.priority || 3) + '/5'),
       dl ? h('span', { class: 'chip ' + dl.tone }, ic('flag', 13), dl.text) : null,
       habits.length ? h('span', { class: 'chip' }, ic('flame', 13), `${habits.length} ${plural(habits.length, ['привычка', 'привычки', 'привычек'])}`) : null,
       p.pct >= 1 ? h('span', { class: 'chip ok' }, ic('check', 13), 'Достигнута') : null));
@@ -133,8 +133,9 @@ export function openGoalDetail(id) {
       const p = goalProgress(goal, data);
       const subs = data.goals.filter((g) => g.parentId === id && !g.archived);
       const direct = data.tasks.filter((t) => t.goalId === id);
-      const dl = deadlineInfo(goal);
-      const habits = data.habits.filter((x) => !x.archived && (x.goalId === id || subs.some((s) => s.id === x.goalId)));
+      const dl = deadlineInfo(goal, todayStr(), data);
+      const habits = data.habits.filter((x) => !x.archived && x.goalId === id);
+      const allLinkedHabits = data.habits.filter((x) => !x.archived && (x.goalId === id || subs.some((s) => s.id === x.goalId)));
       const all = subtreeTasks(id, data);
       const openTasks = all.filter((t) => !t.done).length;
       const color = goal.color || 'blue';
@@ -146,13 +147,13 @@ export function openGoalDetail(id) {
           h('div', { class: 'hero-text' },
             h('div', { class: 'hero-emoji' }, goal.emoji || '🎯'),
             h('h2', null, goal.title),
-            h('div', { class: 'hero-meta' }, goal.category || null, dl ? h('span', { class: dl.tone }, dl.text) : null)),
+            h('div', { class: 'hero-meta' }, goal.category || null, h('span', { class: 'chip goal-priority' }, 'Приоритет ' + (goal.priority || 3) + '/5'), dl ? h('span', { class: dl.tone }, dl.text) : null)),
           ring({ key: 'gd' + id, pct: p.pct, size: 112, stroke: 10, color, center: h('div', { class: 'ring-big' }, h('b', null, Math.round(p.pct * 100)), h('small', null, '%')) })),
         h('div', { class: 'hero-stats' },
-          stat(p.mode === 'metric' ? fmtNum(p.done) : (p.taskDone ?? p.done), p.mode === 'metric' ? (p.unit || 'сейчас') : 'задач выполнено'),
-          stat(p.mode === 'metric' ? fmtNum(p.total) : openTasks, p.mode === 'metric' ? 'цель' : 'осталось'),
+          stat(p.taskDone || 0, 'задач выполнено'),
+          stat(openTasks, 'осталось'),
           stat(subs.length, plural(subs.length, ['подцель', 'подцели', 'подцелей'])),
-          stat(habits.length, plural(habits.length, ['привычка', 'привычки', 'привычек'])))));
+          stat(allLinkedHabits.length, plural(allLinkedHabits.length, ['привычка', 'привычки', 'привычек'])))));
 
       if (goal.progressMode === 'metric') children.push(metricCard(goal, color));
       if (goal.notes) children.push(h('div', { class: 'card note' }, goal.notes));
@@ -160,7 +161,7 @@ export function openGoalDetail(id) {
       // Подцели
       children.push(sectionHead('Подцели', [{ icon: 'plus', label: 'Подцель', onClick: () => editGoal(null, { parentId: id, color }) }]));
       if (!subs.length) children.push(h('div', { class: 'hint' }, 'Подцели помогают разбить большую цель на этапы. У каждой — свои задачи и свой прогресс.'));
-      subs.forEach((s) => children.push(subBlock(s, data, color, api)));
+      subs.forEach((s) => children.push(subBlock(s, data, color, api, p.items.find((item) => item.type === 'subgoal' && item.id === s.id))));
 
       // Задачи самой цели
       children.push(sectionHead(subs.length ? 'Другие задачи цели' : 'Задачи', [{ icon: 'plus', label: 'Задача', onClick: () => editTask(null, { goalId: id }) }]));
@@ -168,7 +169,7 @@ export function openGoalDetail(id) {
 
       // Привычки
       children.push(sectionHead('Привычки цели', [{ icon: 'plus', label: 'Привычка', onClick: () => editHabit(null, { goalId: id, color }) }]));
-      if (!habits.length) children.push(h('div', { class: 'hint' }, 'Привяжите привычки, которые приближают вас к цели, например регулярные тренировки.'));
+      if (!habits.length) children.push(h('div', { class: 'hint' }, 'Привяжите привычки непосредственно к этой цели или добавьте их в нужную подцель.'));
       else children.push(h('div', { class: 'card list' }, habits.map((hb) => habitMini(hb, data))));
 
       children.push(h('div', { class: 'pad-bottom' }));
@@ -193,15 +194,23 @@ export function taskList(list, data, { goalId } = {}) {
   return h('div', { class: 'card list' }, sortTasks(visible).map((t) => taskRow(t, data, { showGoal: false })));
 }
 
-function subBlock(sub, data, parentColor, api) {
+function subBlock(sub, data, parentColor, api, parentItem = null) {
   const p = goalProgress(sub, data);
-  const tasks = data.tasks.filter((t) => t.goalId === sub.id);
+  const tasks = data.tasks.filter((t) => t.goalId === sub.id && !t.deleted && !t.archived);
+  const habits = data.habits.filter((h) => h.goalId === sub.id && !h.archived && !h.deleted);
+  const deadline = deadlineInfo(sub, todayStr(), data);
   const color = sub.color || parentColor;
   const collapsed = expandedBlocks.has(sub.id);
+  const summary = [
+    progressLabel(p),
+    'важность ' + (parentItem ? parentItem.weight : (sub.weight || 3)) + '/5',
+    parentItem ? 'вклад ' + Math.round(parentItem.contributionPct) + '%' : '',
+    deadline ? 'срок ' + deadline.text : 'без срока',
+  ].filter(Boolean).join(' · ');
   return h('div', { class: 'card sub-block', style: { '--c': cv(color) } },
     h('div', { class: 'sub-head', onclick: () => { collapsed ? expandedBlocks.delete(sub.id) : expandedBlocks.add(sub.id); api.refresh(); } },
       ring({ key: 'sb' + sub.id, pct: p.pct, size: 40, stroke: 12, color, center: h('span', { class: 'ring-pct sm' }, Math.round(p.pct * 100)) }),
-      h('div', { class: 'sub-info' }, h('b', null, `${sub.emoji || '•'} ${sub.title}`), h('span', null, progressLabel(p))),
+      h('div', { class: 'sub-info' }, h('b', null, `${sub.emoji || '•'} ${sub.title}`), h('span', null, summary)),
       h('button', { class: 'icon-btn', 'aria-label': 'Изменить подцель', onclick: (e) => { e.stopPropagation(); editGoal(sub); } }, ic('edit', 18)),
       h('span', { class: 'chev' + (collapsed ? '' : ' open') }, ic('chevD', 18))),
     collapsed ? null : h('div', { class: 'sub-body' },
@@ -209,16 +218,24 @@ function subBlock(sub, data, parentColor, api) {
       tasks.some((t) => !t.done || isTaskInCompletionWindow(t.id))
         ? sortTasks(tasks.filter((t) => !t.done || isTaskInCompletionWindow(t.id))).map((t) => taskRow(t, data, { showGoal: false }))
         : h('div', { class: 'hint tight' }, 'В этой подцели пока нет активных задач.'),
-      h('button', { class: 'add-row', onclick: () => editTask(null, { goalId: sub.id }) }, ic('plus', 18), 'Добавить задачу')));
+      habits.length ? h('div', { class: 'card list' }, habits.map((habit) => habitMini(habit, data))) : h('div', { class: 'hint tight' }, 'Привычки в этой подцели появятся здесь.'),
+      h('button', { class: 'add-row', onclick: () => editTask(null, { goalId: sub.id }) }, ic('plus', 18), 'Добавить задачу'),
+      h('button', { class: 'add-row', onclick: () => editHabit(null, { goalId: sub.id, color }) }, ic('plus', 18), 'Добавить привычку')));
 }
 
 function habitMini(hb, data) {
   const st = habitStreaks(hb, data.idx, todayStr(), S.settings().weekStart);
-  const rate = habitRate(hb, data.idx, todayStr(), 30, S.settings().weekStart);
   const doneToday = habitDone(data.idx, hb, todayStr());
+  const owner = data.goals.find((goal) => goal.id === hb.goalId && !goal.deleted);
+  const progress = owner ? goalProgress(owner, data) : null;
+  const item = progress && progress.items.find((entry) => entry.type === 'habit' && entry.id === hb.id);
+  let summary = 'Не учитывается в цели';
+  if (owner && !resolveGoalDeadline(owner, data.goals)) summary = 'Нет срока — не влияет на общий процент';
+  else if (item) summary = Math.round(item.pct * 100) + '% к сроку · важность ' + item.weight + '/5 · вклад ' + Math.round(item.contributionPct) + '%';
+  else if (owner) summary = 'Нет запланированных выполнений в срок';
   return h('div', { class: 'habit-mini', onclick: () => openHabitDetail(hb.id) },
     h('div', { class: 'hm-emoji', style: { '--c': cv(hb.color || 'green') } }, hb.emoji || '•'),
-    h('div', { class: 'hm-main' }, h('b', null, hb.title), h('span', null, rate == null ? 'Только начали' : `${Math.round(rate * 100)}% за 30 дней`)),
+    h('div', { class: 'hm-main' }, h('b', null, hb.title), h('span', null, summary)),
     st.current ? h('span', { class: 'streak-badge' }, ic('flame', 14), st.current + (st.unit === 'week' ? ' нед' : '')) : null,
     doneToday ? h('span', { class: 'ok-dot' }, ic('check', 14)) : null);
 }

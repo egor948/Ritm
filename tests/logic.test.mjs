@@ -27,55 +27,122 @@ test('plural', () => {
   assert.equal(U.plural(21, ['день', 'дня', 'дней']), 'день');
 });
 
-test('прогресс цели: по задачам, по весу, по метрике', () => {
+test('прогресс цели: задачи и подцели учитываются иерархически по весу', () => {
   const goals = [
-    { id: 'g', title: 'Цель' },
-    { id: 's', title: 'Подцель', parentId: 'g' },
+    { id: 'g', title: 'Цель', startDate: '2026-11-01' },
+    { id: 's', title: 'Подцель', parentId: 'g', weight: 4 },
   ];
   const tasks = [
-    { id: 1, goalId: 'g', done: true, weight: 1 },
+    { id: 1, goalId: 'g', done: true, weight: 2 },
     { id: 2, goalId: 's', done: false, weight: 3 },
     { id: 3, goalId: 's', done: true, weight: 1 },
     { id: 4, goalId: 'other', done: true },
   ];
-  const data = { goals, tasks };
-  let p = L.goalProgress(goals[0], data);
-  assert.equal(p.total, 3);
-  assert.equal(p.done, 2);
-  assert.ok(Math.abs(p.pct - 2 / 3) < 1e-9);
-  p = L.goalProgress({ ...goals[0], progressMode: 'weight' }, data);
-  assert.ok(Math.abs(p.pct - 2 / 5) < 1e-9);
-  p = L.goalProgress(goals[1], data);
-  assert.equal(p.pct, 0.5);
-  p = L.goalProgress({ id: 'm', progressMode: 'metric', metric: { start: 0, target: 100, current: 25, unit: 'км' } }, data);
+  const data = { goals, tasks, habits: [], logs: [] };
+  const parent = L.goalProgress(goals[0], data);
+  assert.equal(parent.total, 2);
+  assert.equal(parent.items[1].type, 'subgoal');
+  assert.equal(parent.taskTotal, 1); // задачи подцели не дублируются в родителе
+  assert.ok(Math.abs(parent.pct - 0.5) < 1e-9);
+  const sub = L.goalProgress(goals[1], data);
+  assert.equal(sub.taskTotal, 2);
+  assert.ok(Math.abs(sub.pct - 0.25) < 1e-9);
+
+  let p = L.goalProgress({ id: 'm', progressMode: 'metric', metric: { start: 0, target: 100, current: 25, unit: 'км' } }, data);
   assert.equal(p.pct, 0.25);
-  // убывающая метрика: вес 90 → 80, сейчас 85
+  assert.equal(p.metric.done, 25);
   p = L.goalProgress({ id: 'm', progressMode: 'metric', metric: { start: 90, target: 80, current: 85 } }, data);
   assert.equal(p.pct, 0.5);
   p = L.goalProgress({ id: 'm', progressMode: 'metric', metric: { start: 0, target: 10, current: 50 } }, data);
   assert.equal(p.pct, 1);
   p = L.goalProgress({ id: 'empty' }, data);
   assert.equal(p.pct, 0);
+  assert.equal(p.hasData, false);
 });
 
-test('прогресс цели учитывает выполнение привязанных привычек за последние дни', () => {
-  const goal = { id: 'goal', title: 'Цель' };
-  const subgoal = { id: 'subgoal', title: 'Подцель', parentId: 'goal' };
-  const habit = mkHabit({ id: 'linked-habit', goalId: 'subgoal' });
-  const logs = ['2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14']
+test('привычка по выбранным дням делит свой вес на все запланированные выполнения до срока', () => {
+  const goal = { id: 'goal', title: 'Пресс', startDate: '2026-11-01', deadline: '2026-11-30' };
+  const habit = mkHabit({
+    id: 'linked-habit', goalId: 'goal', startDate: '2026-11-01', goalLinkedAt: '2026-11-01',
+    weight: 3, schedule: { type: 'days', days: [2, 4, 6] },
+  });
+  const logs = ['2026-11-03', '2026-11-05', '2026-11-07']
     .map((date) => ({ habitId: habit.id, date, value: 1 }));
-  const data = { goals: [goal, subgoal], tasks: [
-    { id: 'done', goalId: 'goal', done: true }, { id: 'open', goalId: 'subgoal', done: false },
-  ], habits: [habit], logs };
-  const parentProgress = L.goalProgress(goal, data, { today: T, habitDays: 5 });
-  assert.equal(parentProgress.taskDone, 1);
-  assert.equal(parentProgress.taskTotal, 2);
-  assert.equal(parentProgress.habitTotal, 1);
-  assert.equal(parentProgress.habitPct, 0.8);
-  assert.ok(Math.abs(parentProgress.pct - 0.6) < 1e-9);
-  const subgoalProgress = L.goalProgress(subgoal, data, { today: T, habitDays: 5 });
-  assert.equal(subgoalProgress.habitPct, 0.8);
-  assert.ok(Math.abs(subgoalProgress.pct - 0.4) < 1e-9);
+  const data = { goals: [goal], tasks: [{ id: 'done', goalId: 'goal', done: true, weight: 2 }], habits: [habit], logs };
+  const hp = L.habitGoalProgress(habit, goal, data, { today: T });
+  assert.equal(hp.planned, 12); // вторники, четверги и субботы в ноябре
+  assert.equal(hp.earned, 3);
+  assert.equal(hp.pct, 0.25);
+  const p = L.goalProgress(goal, data, { today: T });
+  assert.ok(Math.abs(p.pct - 0.55) < 1e-9); // задача: 2/5 веса, привычка: 3/5 веса и 25% её выполнения
+  assert.equal(p.habitTotal, 1);
+  assert.equal(p.items.find((item) => item.type === 'habit').weight, 3);
+});
+
+test('привычка без срока видна, но не влияет на общий процент', () => {
+  const goal = { id: 'goal', title: 'Цель' };
+  const habit = mkHabit({ id: 'habit', goalId: 'goal', startDate: '2026-11-01', weight: 5 });
+  const data = { goals: [goal], tasks: [], habits: [habit], logs: [] };
+  let p = L.goalProgress(goal, data, { today: T });
+  assert.equal(p.hasData, false);
+  assert.equal(p.habitTotal, 0);
+  assert.equal(p.pct, 0);
+  data.tasks.push({ id: 'task', goalId: 'goal', done: true, weight: 3 });
+  p = L.goalProgress(goal, data, { today: T });
+  assert.equal(p.pct, 1); // привычка без срока исключена и из числителя, и из знаменателя
+});
+
+test('срок подцели наследуется от родителя, но собственный срок имеет приоритет', () => {
+  const parent = { id: 'goal', deadline: '2026-11-30' };
+  const sub = { id: 'sub', parentId: 'goal' };
+  assert.equal(L.resolveGoalDeadline(sub, [parent, sub]), '2026-11-30');
+  sub.deadline = '2026-11-25';
+  assert.equal(L.resolveGoalDeadline(sub, [parent, sub]), '2026-11-25');
+});
+
+test('подцель влияет на главную цель как единый элемент без двойного учёта задач', () => {
+  const goal = { id: 'goal', startDate: '2026-11-01', deadline: '2026-11-30' };
+  const sub = { id: 'sub', parentId: 'goal', weight: 5 };
+  const data = {
+    goals: [goal, sub],
+    tasks: [{ id: 'a', goalId: 'sub', done: true, weight: 1 }, { id: 'b', goalId: 'sub', done: false, weight: 3 }],
+    habits: [], logs: [],
+  };
+  const child = L.goalProgress(sub, data);
+  const parent = L.goalProgress(goal, data);
+  assert.equal(parent.items.length, 1);
+  assert.equal(parent.items[0].type, 'subgoal');
+  assert.equal(parent.taskTotal, 0);
+  assert.equal(parent.pct, child.pct);
+  assert.equal(child.taskTotal, 2);
+});
+
+test('изменение расписания привычки не переписывает прошлые плановые дни', () => {
+  const goal = { id: 'goal', startDate: '2026-11-01', deadline: '2026-11-30' };
+  const habit = mkHabit({
+    id: 'history', goalId: 'goal', startDate: '2026-11-01',
+    schedule: { type: 'days', days: [2] }, scheduleEffectiveFrom: '2026-11-21',
+    scheduleHistory: [{ from: '2026-11-01', to: '2026-11-20', schedule: { type: 'daily' } }],
+  });
+  const data = { goals: [goal], tasks: [], habits: [habit], logs: [] };
+  const hp = L.habitGoalProgress(habit, goal, data, { today: T });
+  assert.equal(hp.planned, 21); // 20 прежних ежедневных дней + один вторник после смены
+});
+
+test('N выполнений в неделю даёт недельную квоту, а не отдельный балл за каждый день', () => {
+  const goal = { id: 'goal', startDate: '2026-11-02', deadline: '2026-11-15' };
+  const habit = mkHabit({
+    id: 'weekly-goal', goalId: 'goal', startDate: '2026-11-02',
+    schedule: { type: 'weekly', perWeek: 3 },
+  });
+  const data = { goals: [goal], tasks: [], habits: [habit], logs: [
+    ...['2026-11-02', '2026-11-04', '2026-11-06', '2026-11-09', '2026-11-11']
+      .map((date) => ({ habitId: habit.id, date, value: 1 })),
+  ] };
+  const hp = L.habitGoalProgress(habit, goal, data, { today: '2026-11-15' });
+  assert.equal(hp.planned, 6);
+  assert.equal(hp.earned, 5);
+  assert.ok(Math.abs(hp.pct - 5 / 6) < 1e-9);
 });
 
 test('серия ежедневной привычки: сегодня ещё не отмечено не ломает серию', () => {
