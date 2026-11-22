@@ -77,10 +77,35 @@ function changedDateIsPast(date, originalDate, explicitlyChanged = false) {
   return Boolean(date && !isDateNotPast(date) && (explicitlyChanged || date !== originalDate));
 }
 
+function taskReminderBoundary(taskDate, taskTime) {
+  if (!taskDate) return null;
+  const due = taskTime ? localDate(taskDate, taskTime) : localDate(addDays(taskDate, 1), '00:00');
+  const latest = new Date(due.getTime() - 60000);
+  return { date: ymd(latest), time: fromMin(latest.getHours() * 60 + latest.getMinutes()) };
+}
+
+function reminderIsAfterTask(reminder, taskDate, taskTime) {
+  if (!taskDate || !reminder?.date || !reminder?.time) return false;
+  const boundary = taskReminderBoundary(taskDate, taskTime);
+  return reminder.date > boundary.date || (reminder.date === boundary.date && reminder.time > boundary.time);
+}
+
+function hasDuplicateTaskReminders(reminders) {
+  const seen = new Set();
+  for (const reminder of reminders || []) {
+    if (!reminder.date || !reminder.time) continue;
+    const key = `${reminder.date}T${reminder.time}`;
+    if (seen.has(key)) return true;
+    seen.add(key);
+  }
+  return false;
+}
+
 // Несколько независимых напоминаний с собственными датой и временем.
 function remindersGroup(d, redraw, defaultDate) {
   if (!Array.isArray(d.reminders)) d.reminders = [];
   const list = h('div', { class: 'reminder-list' });
+  const refreshers = new Set();
   let addButton;
 
   const makeCard = (reminder) => {
@@ -96,8 +121,18 @@ function remindersGroup(d, redraw, defaultDate) {
         toast('Нельзя поставить напоминание на прошедшую дату');
         return;
       }
+      if (reminderIsAfterTask({ ...reminder, date: v }, d.date, d.time)) {
+        date.querySelector('input').value = reminder.date;
+        toast('Напоминание должно быть раньше срока задачи');
+        return;
+      }
+      if (d.reminders.some((item) => item.id !== reminder.id && item.date === v && item.time === reminder.time)) {
+        date.querySelector('input').value = reminder.date;
+        toast('На это время у задачи уже есть напоминание');
+        return;
+      }
       reminder.date = v;
-      refreshLimits(true);
+      refreshLimits();
     }, { clearable: false });
     const time = timeInput(reminder.time, (v) => {
       if (!v || !isReminderInFuture({ date: reminder.date, time: v }, new Date())) {
@@ -105,27 +140,36 @@ function remindersGroup(d, redraw, defaultDate) {
         toast('Нельзя поставить напоминание на прошедшее время');
         return;
       }
+      if (reminderIsAfterTask({ ...reminder, time: v }, d.date, d.time)) {
+        time.querySelector('input').value = reminder.time;
+        toast('Напоминание должно быть раньше срока задачи');
+        return;
+      }
+      if (d.reminders.some((item) => item.id !== reminder.id && item.date === reminder.date && item.time === v)) {
+        time.querySelector('input').value = reminder.time;
+        toast('На это время у задачи уже есть напоминание');
+        return;
+      }
       reminder.time = v;
-      refreshLimits(false);
+      refreshLimits();
     }, { clearable: false });
 
-    const refreshLimits = (adjustTime) => {
+    const refreshLimits = () => {
       const threshold = reminderThreshold();
+      const boundary = taskReminderBoundary(d.date, d.time);
       const dateField = date.querySelector('input');
       const timeField = time.querySelector('input');
       dateField.min = threshold.date;
+      dateField.max = boundary?.date || '';
       timeField.min = reminder.date === threshold.date ? threshold.time : '';
-      if (adjustTime && reminder.date === threshold.date && reminder.time < threshold.time) {
-        reminder.time = threshold.time;
-        timeField.value = reminder.time;
-        toast('Время уже прошло — выбрана ближайшая доступная минута');
-      }
+      timeField.max = boundary && reminder.date === boundary.date ? boundary.time : '';
     };
-    refreshLimits(false);
+    refreshLimits();
+    refreshers.add(refreshLimits);
 
     const card = h('div', { class: 'reminder-card', 'data-scroll-anchor': `reminder:${reminder.id}` },
       h('div', { class: 'reminder-card-head' },
-        h('div', { class: 'reminder-card-title' }, h('span', {}, 'Напомнить за')),
+        h('div', { class: 'reminder-card-title' }, h('span', {}, 'Напоминание')),
         h('button', { type: 'button', class: 'reminder-remove', 'aria-label': 'Удалить напоминание', onclick: () => {
           const index = d.reminders.findIndex((item) => item.id === reminder.id);
           if (index < 0) return;
@@ -143,12 +187,17 @@ function remindersGroup(d, redraw, defaultDate) {
     type: 'button',
     class: 'reminder-add',
     onclick: () => {
-      const reminder = { id: uid(), ...reminderDefaults(defaultDate) };
+      const reminder = { id: uid(), ...reminderDefaults(d.date || defaultDate || todayStr()) };
+      if (reminderIsAfterTask(reminder, d.date, d.time)) {
+        toast('Для этой задачи уже нет допустимого времени напоминания');
+        return;
+      }
       d.reminders.push(reminder);
       list.insertBefore(makeCard(reminder), addButton);
     },
   }, ic('plus', 17), 'Добавить напоминание');
   list.appendChild(addButton);
+  list.refreshTaskLimits = () => refreshers.forEach((refresh) => refresh());
   return list;
 }
 
@@ -185,7 +234,11 @@ export function editTask(task, defaults = {}) {
   return editorShell({
     title: isNew ? 'Новая задача' : 'Задача',
     draft,
-    valid: (d) => (!d.title.trim() ? 'Введите название задачи' : changedDateIsPast(d.date, originalDate, dateWasChanged) ? 'Нельзя назначить задачу на прошедшую дату' : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем' : null),
+    valid: (d) => (!d.title.trim() ? 'Введите название задачи'
+      : changedDateIsPast(d.date, originalDate, dateWasChanged) ? 'Нельзя назначить задачу на прошедшую дату'
+        : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем'
+          : d.reminders.some((r) => reminderIsAfterTask(r, d.date, d.time)) ? 'Напоминание должно быть раньше срока задачи'
+            : hasDuplicateTaskReminders(d.reminders) ? 'Уберите повторяющиеся напоминания' : null),
     onSave: (d) => {
       const out = { ...d, title: d.title.trim(), priority: normalizePriority(d.priority), checklist: d.checklist.filter((c) => c.text.trim()) };
       out.reminders = (out.reminders || []).filter((r) => r.date && r.time).map((r) => ({ id: r.id || uid(), date: r.date, time: r.time }));
@@ -201,6 +254,10 @@ export function editTask(task, defaults = {}) {
     },
     draw(body, d, redraw) {
       const titleInp = textInput({ value: d.title, placeholder: 'Что нужно сделать?', big: true, onInput: (v) => (d.title = v), autofocus: isNew });
+      let taskDatePresets;
+      let taskTimeRow;
+      let taskReminderList;
+      const refreshTaskReminderLimits = () => taskReminderList?.refreshTaskLimits();
       const taskDateControl = dateInput(d.date, (v) => {
         if (changedDateIsPast(v, originalDate, true)) {
           taskDateControl.querySelector('input').value = d.date || '';
@@ -210,28 +267,44 @@ export function editTask(task, defaults = {}) {
         dateWasChanged = true;
         d.date = v;
         selectedDatePreset = null;
-        redraw();
+        taskDatePresets?.querySelectorAll('.pill').forEach((pill) => pill.classList.remove('on'));
+        if (taskTimeRow) taskTimeRow.style.display = d.date ? '' : 'none';
+        refreshTaskReminderLimits();
       }, { min: todayStr() });
-      const taskTimeRow = row('Время', timeInput(d.time, (v) => { d.time = v; }), { icon: 'clock', iconColor: 'blue' });
+      taskTimeRow = row('Время', timeInput(d.time, (v) => {
+        d.time = v;
+        refreshTaskReminderLimits();
+      }), { icon: 'clock', iconColor: 'blue' });
       taskTimeRow.style.display = d.date ? '' : 'none';
+      const datePresets = taskDatePresets = pills({
+        options: [{ v: 'today', label: 'Сегодня' }, { v: 'tomorrow', label: 'Завтра' }, { v: 'week', label: 'Через неделю' }, { v: 'none', label: 'Без даты' }],
+        value: selectedDatePreset,
+        onChange: (v) => {
+          const nextDate = v === 'today' ? todayStr() : v === 'tomorrow' ? addDays(todayStr(), 1) : v === 'week' ? addDays(todayStr(), 7) : null;
+          if (changedDateIsPast(nextDate, originalDate, true)) { toast('Нельзя назначить задачу на прошедшую дату'); return; }
+          dateWasChanged = true;
+          selectedDatePreset = v;
+          d.date = nextDate;
+          taskDateControl.querySelector('input').value = nextDate || '';
+          if (taskTimeRow) taskTimeRow.style.display = nextDate ? '' : 'none';
+          refreshTaskReminderLimits();
+        },
+      });
+      taskReminderList = remindersGroup(d, redraw, d.date || todayStr());
       body.append(
         group(h('div', { class: 'row solo' }, titleInp)),
         group(h('div', { class: 'row solo' }, textInput({ value: d.notes, placeholder: 'Заметки', multiline: true, onInput: (v) => (d.notes = v) }))),
         groupTitle('Цель'),
         group(row('Привязать к цели', selectInput(goalOptions(data), d.goalId, (v) => { d.goalId = v; redraw(); }), { icon: 'target', iconColor: 'green' })),
-        goalMode() ? group(row('Вес в прогрессе', stepper(d.weight || 1, (v) => (d.weight = v), { min: 1, max: 10 }), { icon: 'flag', iconColor: 'orange' }), groupNote('Чем больше вес, тем сильнее выполнение задачи двигает прогресс цели.')) : null,
+        goalMode() ? group(row('Вес в прогрессе', stepper(d.weight || 1, (v) => (d.weight = v), { min: 1, max: 10 }), groupNote('Чем больше вес, тем сильнее выполнение задачи двигает прогресс цели.')) : null,
         groupTitle('Когда'),
         group(
-          h('div', { class: 'row' }, pills({
-            options: [{ v: 'today', label: 'Сегодня' }, { v: 'tomorrow', label: 'Завтра' }, { v: 'week', label: 'Через неделю' }, { v: 'none', label: 'Без даты' }],
-            value: selectedDatePreset,
-            onChange: (v) => { const nextDate = v === 'today' ? todayStr() : v === 'tomorrow' ? addDays(todayStr(), 1) : v === 'week' ? addDays(todayStr(), 7) : null; if (changedDateIsPast(nextDate, originalDate, true)) { toast('Нельзя назначить задачу на прошедшую дату'); return; } dateWasChanged = true; selectedDatePreset = v; d.date = nextDate; redraw(); },
-          })),
+          h('div', { class: 'row' }, datePresets),
           row('Дата', taskDateControl, { icon: 'calendar', iconColor: 'red' }),
           taskTimeRow,
-          ),
+        ),
         groupTitle('Напоминания'),
-        remindersGroup(d, redraw, d.date || todayStr()),
+        taskReminderList,
         groupTitle('Приоритет'),
         group(prioritySelector(d)),
         groupTitle('Чек-лист'),
