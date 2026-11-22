@@ -90,6 +90,21 @@ function reminderIsAfterTask(reminder, taskDate, taskTime) {
   return reminder.date > boundary.date || (reminder.date === boundary.date && reminder.time > boundary.time);
 }
 
+function taskReminderDefaults(preferredDate, taskDate, taskTime) {
+  const defaults = reminderDefaults(preferredDate);
+  const boundary = taskReminderBoundary(taskDate, taskTime);
+  if (!boundary) return defaults;
+  if (defaults.date > boundary.date) {
+    defaults.date = boundary.date;
+    defaults.time = boundary.time;
+  } else if (defaults.date === boundary.date && defaults.time > boundary.time) {
+    defaults.time = boundary.time;
+  }
+  const threshold = reminderThreshold();
+  if (defaults.date < threshold.date || (defaults.date === threshold.date && defaults.time < threshold.time)) return null;
+  return defaults;
+}
+
 function hasDuplicateTaskReminders(reminders) {
   const seen = new Set();
   for (const reminder of reminders || []) {
@@ -187,11 +202,12 @@ function remindersGroup(d, redraw, defaultDate) {
     type: 'button',
     class: 'reminder-add',
     onclick: () => {
-      const reminder = { id: uid(), ...reminderDefaults(d.date || defaultDate || todayStr()) };
-      if (reminderIsAfterTask(reminder, d.date, d.time)) {
-        toast('Для этой задачи уже нет допустимого времени напоминания');
+      const defaults = taskReminderDefaults(d.date || defaultDate || todayStr(), d.date, d.time);
+      if (!defaults) {
+        toast('Для этой задачи уже нет будущего времени напоминания');
         return;
       }
+      const reminder = { id: uid(), ...defaults };
       d.reminders.push(reminder);
       list.insertBefore(makeCard(reminder), addButton);
     },
@@ -296,7 +312,10 @@ export function editTask(task, defaults = {}) {
         group(h('div', { class: 'row solo' }, textInput({ value: d.notes, placeholder: 'Заметки', multiline: true, onInput: (v) => (d.notes = v) }))),
         groupTitle('Цель'),
         group(row('Привязать к цели', selectInput(goalOptions(data), d.goalId, (v) => { d.goalId = v; redraw(); }), { icon: 'target', iconColor: 'green' })),
-        goalMode() ? group(row('Вес в прогрессе', stepper(d.weight || 1, (v) => (d.weight = v), { min: 1, max: 10 }), groupNote('Чем больше вес, тем сильнее выполнение задачи двигает прогресс цели.')) : null,
+        goalMode() ? group(
+        row('Вес в прогрессе', stepper(d.weight || 1, (v) => (d.weight = v), { min: 1, max: 10 }), { icon: 'flag', iconColor: 'orange' }),
+        groupNote('Чем больше вес, тем сильнее выполнение задачи двигает прогресс цели.'),
+      ) : null,
         groupTitle('Когда'),
         group(
           h('div', { class: 'row' }, datePresets),
