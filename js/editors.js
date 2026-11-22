@@ -90,19 +90,28 @@ function reminderIsAfterTask(reminder, taskDate, taskTime) {
   return reminder.date > boundary.date || (reminder.date === boundary.date && reminder.time > boundary.time);
 }
 
-function taskReminderDefaults(preferredDate, taskDate, taskTime) {
+function taskReminderDefaults(preferredDate, taskDate, taskTime, existing = []) {
   const defaults = reminderDefaults(preferredDate);
   const boundary = taskReminderBoundary(taskDate, taskTime);
-  if (!boundary) return defaults;
-  if (defaults.date > boundary.date) {
-    defaults.date = boundary.date;
-    defaults.time = boundary.time;
-  } else if (defaults.date === boundary.date && defaults.time > boundary.time) {
-    defaults.time = boundary.time;
+  if (boundary) {
+    if (defaults.date > boundary.date) {
+      defaults.date = boundary.date;
+      defaults.time = boundary.time;
+    } else if (defaults.date === boundary.date && defaults.time > boundary.time) {
+      defaults.time = boundary.time;
+    }
   }
   const threshold = reminderThreshold();
   if (defaults.date < threshold.date || (defaults.date === threshold.date && defaults.time < threshold.time)) return null;
-  return defaults;
+
+  const candidate = localDate(defaults.date, defaults.time);
+  for (let attempt = 0; existing.some((reminder) => reminder.date === ymd(candidate) && reminder.time === fromMin(candidate.getHours() * 60 + candidate.getMinutes())); attempt++) {
+    if (attempt >= 180) return null;
+    candidate.setMinutes(candidate.getMinutes() + 1);
+    const next = { date: ymd(candidate), time: fromMin(candidate.getHours() * 60 + candidate.getMinutes()) };
+    if (reminderIsAfterTask(next, taskDate, taskTime) || !isReminderInFuture(next, new Date())) return null;
+  }
+  return { date: ymd(candidate), time: fromMin(candidate.getHours() * 60 + candidate.getMinutes()) };
 }
 
 function hasDuplicateTaskReminders(reminders) {
@@ -202,7 +211,7 @@ function remindersGroup(d, redraw, defaultDate) {
     type: 'button',
     class: 'reminder-add',
     onclick: () => {
-      const defaults = taskReminderDefaults(d.date || defaultDate || todayStr(), d.date, d.time);
+      const defaults = taskReminderDefaults(d.date || defaultDate || todayStr(), d.date, d.time, d.reminders);
       if (!defaults) {
         toast('Для этой задачи уже нет будущего времени напоминания');
         return;
