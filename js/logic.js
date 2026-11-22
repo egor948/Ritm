@@ -446,7 +446,9 @@ export function buildReminders(data, idx, now = new Date(), horizonDays = 14, de
       for (const r of (t.reminders || [])) {
         if (!r.date || !r.time) continue;
         const when = localDate(r.date, r.time);
-        if (taskDueAt && when.getTime() >= taskDueAt.getTime()) continue;
+        // Для задач со временем допускаем срабатывание точно в момент срока.
+        // Для задач без времени сохраняем границу конца указанного дня.
+        if (taskDueAt && (t.time ? when.getTime() > taskDueAt.getTime() : when.getTime() >= taskDueAt.getTime())) continue;
         const fireKey = when.getTime();
         if (seenTaskReminderTimes.has(fireKey)) continue;
         seenTaskReminderTimes.add(fireKey);
