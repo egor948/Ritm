@@ -1184,3 +1184,42 @@ small { font-size: 12px; }
 .habit-month-day.today { outline: 1.5px solid var(--accent); outline-offset: 1px; }
 .habit-month-day.future { opacity: .25; }
 .habit-month-day.blank { background: transparent; }
+
+
+/* Сводка виджета «День» */
+.today-stats-sheet { max-height: min(88vh, 820px); }
+.today-stats-overview { display:flex; align-items:center; gap:15px; padding:14px 16px; border-radius:20px; background:var(--sheet-group); margin:2px 0 18px; }
+.today-stats-overview-copy { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.today-stats-overview-copy b { font-size:16px; font-weight:700; }
+.today-stats-overview-copy span { font-size:12.5px; color:var(--label-2); line-height:1.35; }
+.today-stats-section { margin:18px 0 0; }
+.today-stats-section-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:0 3px 8px; }
+.today-stats-section-head b { font-size:15px; font-weight:700; }
+.today-stats-section-head span { color:var(--label-2); font-size:12px; font-variant-numeric:tabular-nums; }
+.today-stats-list { display:flex; flex-direction:column; padding:0 13px; border-radius:17px; background:var(--sheet-group); }
+.today-stat-row { display:flex; align-items:center; gap:11px; min-height:55px; padding:7px 0; }
+.today-stat-row + .today-stat-row { border-top:.5px solid var(--sep); }
+.today-stat-icon { display:grid; place-items:center; flex:none; width:34px; height:34px; border-radius:11px; color:var(--accent); background:color-mix(in srgb,var(--accent) 11%,transparent); }
+.today-stat-icon.done { color:var(--c-green); background:color-mix(in srgb,var(--c-green) 12%,transparent); }
+.today-stat-icon.goal { color:var(--c-purple); background:color-mix(in srgb,var(--c-purple) 12%,transparent); }
+.today-stat-icon.event { color:var(--c-red); background:color-mix(in srgb,var(--c-red) 11%,transparent); }
+.today-stat-icon.muted { color:var(--label-2); background:var(--fill); }
+.today-stat-icon.habit { color:var(--c-green); background:color-mix(in srgb,var(--c-green) 10%,transparent); }
+.today-stat-copy { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.today-stat-copy b { font-size:14px; font-weight:600; overflow-wrap:anywhere; }
+.today-stat-copy small { color:var(--label-2); font-size:11.5px; }
+.today-stats-empty { padding:18px 12px; border-radius:15px; background:var(--sheet-group); color:var(--label-2); text-align:center; font-size:13px; }
+
+/* Фильтр статусов целей */
+.goal-status-scroll { margin:0 -16px; padding:0 16px; }
+.goal-status-filter { gap:7px; padding:2px 0 4px; }
+.goal-status-filter .pill { flex:none; min-height:36px; padding:8px 13px; border-radius:13px; background:var(--fill); color:var(--label-2); font-size:12.5px; font-weight:650; transition:background .2s,color .2s,transform .2s; }
+.goal-status-filter .pill.on { background:var(--label); color:var(--bg); box-shadow:0 2px 8px rgba(0,0,0,.08); }
+.goal-filter-empty { display:flex; flex-direction:column; align-items:center; gap:5px; padding:30px 16px; border-radius:20px; background:var(--surface); text-align:center; }
+.goal-filter-empty > span { display:grid; place-items:center; width:40px; height:40px; margin-bottom:5px; border-radius:14px; background:var(--fill); color:var(--label-2); font-size:24px; }
+.goal-filter-empty b { font-size:15px; }
+.goal-filter-empty small { color:var(--label-2); font-size:12.5px; }
+
+/* В режиме редактирования содержимое виджетов нельзя активировать. */
+.widget-edit-content, .widget-edit-content * { pointer-events:none !important; }
+.widget-edit-content { user-select:none; -webkit-user-select:none; }

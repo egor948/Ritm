@@ -58,6 +58,26 @@ test('прогресс цели: по задачам, по весу, по мет
   assert.equal(p.pct, 0);
 });
 
+test('прогресс цели учитывает выполнение привязанных привычек за последние дни', () => {
+  const goal = { id: 'goal', title: 'Цель' };
+  const subgoal = { id: 'subgoal', title: 'Подцель', parentId: 'goal' };
+  const habit = mkHabit({ id: 'linked-habit', goalId: 'subgoal' });
+  const logs = ['2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14']
+    .map((date) => ({ habitId: habit.id, date, value: 1 }));
+  const data = { goals: [goal, subgoal], tasks: [
+    { id: 'done', goalId: 'goal', done: true }, { id: 'open', goalId: 'subgoal', done: false },
+  ], habits: [habit], logs };
+  const parentProgress = L.goalProgress(goal, data, { today: T, habitDays: 5 });
+  assert.equal(parentProgress.taskDone, 1);
+  assert.equal(parentProgress.taskTotal, 2);
+  assert.equal(parentProgress.habitTotal, 1);
+  assert.equal(parentProgress.habitPct, 0.8);
+  assert.ok(Math.abs(parentProgress.pct - 0.6) < 1e-9);
+  const subgoalProgress = L.goalProgress(subgoal, data, { today: T, habitDays: 5 });
+  assert.equal(subgoalProgress.habitPct, 0.8);
+  assert.ok(Math.abs(subgoalProgress.pct - 0.4) < 1e-9);
+});
+
 test('серия ежедневной привычки: сегодня ещё не отмечено не ломает серию', () => {
   const h = mkHabit();
   const idx = idxOf(h, ['2026-11-12', '2026-11-13', '2026-11-14']);

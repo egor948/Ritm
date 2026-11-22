@@ -18,28 +18,50 @@ export function subtreeTasks(goalId, data) {
 
 /**
  * Прогресс цели или подцели.
- *  - mode 'tasks'  : доля выполненных задач
- *  - mode 'weight' : доля выполненных задач с учётом их веса
- *  - mode 'metric' : (текущее - старт) / (цель - старт)
+ * Задачи и привязанные привычки влияют на общий процент. Каждая привычка
+ * вносит свою долю выполнения за последние 30 дней, а задачи — 0 или 100%.
  */
-export function goalProgress(goal, data) {
+function linkedHabitRates(goal, data, options = {}) {
+  const ids = new Set([goal.id, ...subgoalsOf(data.goals || [], goal.id).map((subgoal) => subgoal.id)]);
+  const habits = (data.habits || []).filter((habit) => !habit.archived && ids.has(habit.goalId));
+  if (!habits.length) return [];
+  const idx = data.idx || buildLogIndex(data.logs || []);
+  const today = options.today || ymd(new Date());
+  const weekStartDay = options.weekStartDay ?? (data.settings && data.settings.weekStart) ?? 1;
+  const days = options.habitDays || 30;
+  return habits.map((habit) => habitRate(habit, idx, today, days, weekStartDay)).filter((rate) => rate != null);
+}
+function includeHabitProgress(base, goal, data, baseWeight, options) {
+  const rates = linkedHabitRates(goal, data, options);
+  if (!rates.length) return base;
+  const habitDone = rates.reduce((sum, rate) => sum + rate, 0);
+  const habitTotal = rates.length;
+  const totalWeight = baseWeight + habitTotal;
+  const doneWeight = base.pct * baseWeight + habitDone;
+  return { ...base, pct: totalWeight ? doneWeight / totalWeight : 0,
+    habitPct: habitDone / habitTotal, habitDone, habitTotal };
+}
+export function goalProgress(goal, data, options = {}) {
   const mode = goal.progressMode || 'tasks';
   if (mode === 'metric' && goal.metric) {
     const { start = 0, target = 0, current = start } = goal.metric;
     const span = target - start;
     const pct = span === 0 ? (current === target ? 1 : 0) : clamp((current - start) / span, 0, 1);
-    return { pct, done: current, total: target, mode, unit: goal.metric.unit || '' };
+    return includeHabitProgress({ pct, done: current, total: target, mode, unit: goal.metric.unit || '' }, goal, data, 1, options);
   }
   const tasks = subtreeTasks(goal.id, data);
+  const taskDone = tasks.filter((task) => task.done).length;
   if (mode === 'weight') {
-    const total = tasks.reduce((s, t) => s + (t.weight || 1), 0);
-    const done = tasks.filter((t) => t.done).reduce((s, t) => s + (t.weight || 1), 0);
-    return { pct: total ? done / total : 0, done: tasks.filter((t) => t.done).length, total: tasks.length, mode };
+    const totalWeight = tasks.reduce((sum, task) => sum + (task.weight || 1), 0);
+    const doneWeight = tasks.filter((task) => task.done).reduce((sum, task) => sum + (task.weight || 1), 0);
+    const base = { pct: totalWeight ? doneWeight / totalWeight : 0, done: taskDone,
+      total: tasks.length, mode, taskDone, taskTotal: tasks.length };
+    return includeHabitProgress(base, goal, data, totalWeight, options);
   }
-  const done = tasks.filter((t) => t.done).length;
-  return { pct: tasks.length ? done / tasks.length : 0, done, total: tasks.length, mode: 'tasks' };
+  const base = { pct: tasks.length ? taskDone / tasks.length : 0, done: taskDone,
+    total: tasks.length, mode: 'tasks', taskDone, taskTotal: tasks.length };
+  return includeHabitProgress(base, goal, data, tasks.length, options);
 }
-
 // =====================================================================
 // Привычки
 // =====================================================================

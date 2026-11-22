@@ -306,7 +306,8 @@ function header(mode, date) {
         h('button', { class: 'nav-btn', 'aria-label': 'Назад', onclick: () => shift(mode, -1) }, ic('chevL', 22)),
         h('button', { class: 'nav-btn', 'aria-label': 'Вперёд', onclick: () => shift(mode, 1) }, ic('chevR', 22)),
         navBtn('calendar', 'Календари', () => openCalendarManager(openFilters, (id) => { view.calDate = todayStr(); agendaDays = id ? 365 : 30; })),
-        navBtn('plus', 'Добавить', () => quickAdd({ date })))),
+        navBtn('plus', 'Добавить', () => quickAdd({ date })),
+        navBtn('gear', 'Настройки', () => document.dispatchEvent(new CustomEvent('open-settings')), 'nav-settings'))),
     h('div', { class: 'cal-ctl' },
       seg({ key: 'cal-mode', cls: 'small', options: [{ v: 'day', label: 'День' }, { v: 'week', label: 'Неделя' }, { v: 'month', label: 'Месяц' }, { v: 'year', label: 'Год' }, { v: 'agenda', label: 'Список' }], value: mode, onChange: setMode }),
       h('button', { class: 'today-btn', onclick: () => { view.calDir = view.calDate > todayStr() ? -1 : 1; view.calDate = todayStr(); scrollTop = null; rerender(); } }, 'Сегодня')));

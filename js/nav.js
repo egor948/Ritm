@@ -14,4 +14,6 @@ export const view = {
   tasksFilter: 'today',
   habitsTab: 'today',
   goalsCategory: 'all',
+  goalsStatus: 'all',
+  goalsStatus: 'all',
 };

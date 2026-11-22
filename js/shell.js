@@ -12,7 +12,8 @@ export function screen({ title, eyebrow, actions = [], children = [], fixed = fa
   const visibleActions = screenActions(actions);
   const nav = h('header', { class: 'nav' }, h('div', { class: 'nav-title' }, title), h('div', { class: 'nav-actions' }, visibleActions));
   if (fixed) {
-    return h('section', { class: 'screen fixed', 'data-screen': id }, h('header', { class: 'nav solid' }, header, settingsAction()), h('div', { class: 'fixed-body' }, children));
+    const headerHasSettings = !!(header && header.querySelector && header.querySelector('[data-nav-icon="gear"]'));
+    return h('section', { class: 'screen fixed', 'data-screen': id }, h('header', { class: 'nav solid' }, header, headerHasSettings ? null : settingsAction()), h('div', { class: 'fixed-body' }, children));
   }
   const scroller = h('div', { class: 'scroll' },
     h('div', { class: 'large' }, eyebrow ? h('div', { class: 'eyebrow' }, eyebrow) : null, h('h1', null, title)),

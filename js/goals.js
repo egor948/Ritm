@@ -23,9 +23,15 @@ export function deadlineInfo(goal, today = todayStr()) {
 }
 
 export const progressLabel = (p) => {
-  if (p.mode === 'metric') return `${fmtNum(p.done)} из ${fmtNum(p.total)}${p.unit ? ' ' + p.unit : ''}`;
-  return p.total ? `${p.done} из ${p.total} ${plural(p.total, ['задачи', 'задач', 'задач'])}` : 'Нет задач';
+  if (p.mode === 'metric') {
+    const metric = fmtNum(p.done) + ' из ' + fmtNum(p.total) + (p.unit ? ' ' + p.unit : '');
+    return p.habitTotal ? metric + ' · привычки ' + Math.round(p.habitPct * 100) + '%' : metric;
+  }
+  if (p.habitTotal) return Math.round(p.pct * 100) + '% · задачи ' + (p.taskDone || 0) + '/'
+    + (p.taskTotal || 0) + ' · привычки ' + Math.round(p.habitPct * 100) + '%';
+  return p.total ? p.done + ' из ' + p.total + ' ' + plural(p.total, ['задачи', 'задач', 'задач']) : 'Нет задач';
 };
+
 export const fmtNum = (n) => (Math.abs(n) >= 10000 ? Math.round(n).toLocaleString('ru-RU') : String(Math.round(n * 100) / 100).replace('.', ','));
 
 // =====================================================================
@@ -38,9 +44,22 @@ export function goalsScreen() {
   const archived = tops.filter((g) => g.archived);
   const cats = [...new Set(active.map((g) => g.category).filter(Boolean))];
   if (view.goalsCategory !== 'all' && !cats.includes(view.goalsCategory)) view.goalsCategory = 'all';
-  const shown = active.filter((g) => view.goalsCategory === 'all' || g.category === view.goalsCategory)
+  if (!['all', 'progress', 'achieved', 'planned'].includes(view.goalsStatus)) view.goalsStatus = 'all';
+  const progressById = new Map(active.map((goal) => [goal.id, goalProgress(goal, data)]));
+  const statusOf = (goal) => {
+    const pct = progressById.get(goal.id).pct;
+    return pct >= 1 ? 'achieved' : pct > 0 ? 'progress' : 'planned';
+  };
+  const statusCounts = {
+    all: active.length,
+    progress: active.filter((goal) => statusOf(goal) === 'progress').length,
+    achieved: active.filter((goal) => statusOf(goal) === 'achieved').length,
+    planned: active.filter((goal) => statusOf(goal) === 'planned').length,
+  };
+  const shown = active.filter((goal) => view.goalsStatus === 'all' || statusOf(goal) === view.goalsStatus)
+    .filter((goal) => view.goalsCategory === 'all' || goal.category === view.goalsCategory)
     .sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'));
-  const progresses = active.map((g) => goalProgress(g, data).pct);
+  const progresses = active.map((goal) => progressById.get(goal.id).pct);
   const avg = progresses.length ? progresses.reduce((s, v) => s + v, 0) / progresses.length : 0;
 
   const body = [];
@@ -51,9 +70,21 @@ export function goalsScreen() {
         h('b', null, 'Общий прогресс'),
         h('span', null, `${active.length} ${plural(active.length, ['активная цель', 'активные цели', 'активных целей'])}`),
         (() => { const next = active.filter((g) => g.deadline && goalProgress(g, data).pct < 1).sort((a, b) => a.deadline.localeCompare(b.deadline))[0]; return next ? h('span', { class: 'dim' }, `Ближайший срок: «${next.title}» — ${deadlineInfo(next).text.split(' · ')[1] || ''}`) : null; })())));
-    if (cats.length) body.push(h('div', { class: 'hscroll rise', style: { '--i': 1 } }, pills({ options: [{ v: 'all', label: 'Все' }, ...cats.map((c) => ({ v: c, label: c }))], value: view.goalsCategory, onChange: (v) => { view.goalsCategory = v; document.dispatchEvent(new CustomEvent('rerender')); } })));
-    shown.forEach((g, i) => body.push(goalCard(g, data, i + 2)));
-    if (archived.length) body.push(h('button', { class: 'link-btn rise', style: { '--i': shown.length + 3 }, onclick: () => openArchive(archived) }, `Архив · ${archived.length}`));
+    body.push(h('div', { class: 'hscroll goal-status-scroll rise', style: { '--i': 1 } }, pills({
+      cls: 'goal-status-filter',
+      options: [
+        { v: 'all', label: 'Все · ' + statusCounts.all },
+        { v: 'progress', label: 'В процессе · ' + statusCounts.progress },
+        { v: 'achieved', label: 'Достигнуты · ' + statusCounts.achieved },
+        { v: 'planned', label: 'Не начаты · ' + statusCounts.planned },
+      ],
+      value: view.goalsStatus,
+      onChange: (v) => { view.goalsStatus = v; document.dispatchEvent(new CustomEvent('rerender')); },
+    })));
+    if (cats.length) body.push(h('div', { class: 'hscroll rise', style: { '--i': 2 } }, pills({ options: [{ v: 'all', label: 'Все категории' }, ...cats.map((c) => ({ v: c, label: c }))], value: view.goalsCategory, onChange: (v) => { view.goalsCategory = v; document.dispatchEvent(new CustomEvent('rerender')); } })));
+    if (shown.length) shown.forEach((g, i) => body.push(goalCard(g, data, i + 3)));
+    else body.push(h('div', { class: 'goal-filter-empty' }, h('span', null, '◌'), h('b', null, 'Целей в этом статусе нет'), h('small', null, 'Измените фильтр, чтобы посмотреть другие цели.')));
+    if (archived.length) body.push(h('button', { class: 'link-btn rise', style: { '--i': shown.length + 4 }, onclick: () => openArchive(archived) }, `Архив · ${archived.length}`));
   } else {
     body.push(emptyState({ emoji: '🎯', title: 'Начните с первой цели', text: 'Разбейте её на подцели и задачи — прогресс будет считаться сам, а задачи появятся в календаре.', action: { label: 'Создать цель', onClick: () => editGoal(null) } }));
   }
@@ -118,7 +149,7 @@ export function openGoalDetail(id) {
             h('div', { class: 'hero-meta' }, goal.category || null, dl ? h('span', { class: dl.tone }, dl.text) : null)),
           ring({ key: 'gd' + id, pct: p.pct, size: 112, stroke: 10, color, center: h('div', { class: 'ring-big' }, h('b', null, Math.round(p.pct * 100)), h('small', null, '%')) })),
         h('div', { class: 'hero-stats' },
-          stat(p.mode === 'metric' ? fmtNum(p.done) : p.done, p.mode === 'metric' ? (p.unit || 'сейчас') : plural(p.done, ['выполнена', 'выполнено', 'выполнено'])),
+          stat(p.mode === 'metric' ? fmtNum(p.done) : (p.taskDone ?? p.done), p.mode === 'metric' ? (p.unit || 'сейчас') : 'задач выполнено'),
           stat(p.mode === 'metric' ? fmtNum(p.total) : openTasks, p.mode === 'metric' ? 'цель' : 'осталось'),
           stat(subs.length, plural(subs.length, ['подцель', 'подцели', 'подцелей'])),
           stat(habits.length, plural(habits.length, ['привычка', 'привычки', 'привычек'])))));

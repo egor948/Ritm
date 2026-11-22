@@ -1,5 +1,5 @@
 // Экран «Сегодня»: настраиваемые виджеты.
-import { h, todayStr, addDays, greeting, fmtLong, nowMin, fromMin, fmtRemain, plural, WD_SHORT, dow, localDate } from './util.js';
+import { h, todayStr, ymd, addDays, greeting, fmtLong, nowMin, fromMin, fmtRemain, plural, WD_SHORT, dow, localDate } from './util.js';
 import * as S from './store.js';
 import { visibleEventsData } from './calendars.js';
 import { dayItems, dayScore, isScheduled, habitDone, habitStreaks, goalProgress, habitTarget } from './logic.js';
@@ -29,6 +29,61 @@ function widgetShell(id, i, body, { onClick, extra } = {}) {
     body);
 }
 
+function openTodayStats(data, today, items) {
+  const score = dayScore(data, data.idx, today);
+  const tasks = data.tasks.filter((task) => task.date === today
+    || (task.done && task.doneAt && !task.date && ymd(new Date(task.doneAt)) === today));
+  const habits = data.habits.filter((habit) => isScheduled(habit, today));
+  const doneTasks = tasks.filter((task) => task.done);
+  const pendingTasks = tasks.filter((task) => !task.done);
+  const doneHabits = habits.filter((habit) => habitDone(data.idx, habit, today));
+  const pendingHabits = habits.filter((habit) => !habitDone(data.idx, habit, today));
+  const now = nowMin();
+  const row = (icon, title, note, tone = '') => h('div', { class: 'today-stat-row' },
+    h('span', { class: 'today-stat-icon ' + tone }, ic(icon, 17)),
+    h('span', { class: 'today-stat-copy' }, h('b', null, title), h('small', null, note)));
+  const completedRows = [
+    ...doneTasks.map((task) => row('check', task.title, task.time ? 'Задача · ' + task.time : 'Задача', 'done')),
+    ...doneHabits.map((habit) => row('flame', (habit.emoji || '•') + ' ' + habit.title, 'Привычка выполнена', 'done')),
+  ];
+  const upcomingItems = [
+    ...items.deadlines.map((goal) => ({ order: -2, node: row('target', goal.title, 'Срок цели сегодня', 'goal') })),
+    ...items.allDay.filter((item) => item.type === 'event').map((event) => ({ order: -1, node: row('calendar', event.title, 'Событие · весь день', 'event') })),
+    ...items.timed.filter((item) => item.type === 'event' && item.endMin > now).map((event) => ({
+      order: event.startMin,
+      node: row('calendar', event.title, event.startMin <= now ? 'Сейчас · до ' + fromMin(event.endMin) : 'Событие · ' + fromMin(event.startMin), 'event'),
+    })),
+  ].sort((a, b) => a.order - b.order);
+  const upcomingRows = upcomingItems.map((item) => item.node);
+  const pastRows = items.timed.filter((item) => item.type === 'event' && item.endMin <= now)
+    .map((event) => row('clock', event.title, 'Уже прошло · ' + fromMin(event.startMin), 'muted'));
+  const overdueTasks = data.tasks.filter((task) => !task.done && task.date && task.date < today);
+  const pendingRows = [
+    ...upcomingRows,
+    ...pendingTasks.map((task) => row('list', task.title, task.time ? 'Задача · ' + task.time : 'Задача на сегодня', 'task')),
+    ...pendingHabits.map((habit) => row('flame', (habit.emoji || '•') + ' ' + habit.title, 'Привычка по плану', 'habit')),
+    ...overdueTasks.map((task) => row('list', task.title, 'Просрочено · ' + task.date, 'task')),
+  ];
+  const section = (title, count, rows, emptyText) => h('section', { class: 'today-stats-section' },
+    h('div', { class: 'today-stats-section-head' }, h('b', null, title), h('span', null, String(count))),
+    rows.length ? h('div', { class: 'today-stats-list' }, rows) : h('div', { class: 'today-stats-empty' }, emptyText));
+  openSheet({
+    title: 'Сводка за сегодня', left: { label: 'Закрыть' }, right: null, tall: true, cls: 'today-stats-sheet',
+    build(api) {
+      api.body.append(
+        h('div', { class: 'today-stats-overview' },
+          ring({ key: 'today-stats', pct: score.pct, size: 78, stroke: 9, color: 'blue', center: h('b', null, Math.round(score.pct * 100) + '%') }),
+          h('div', { class: 'today-stats-overview-copy' },
+            h('b', null, score.done + ' из ' + score.total + ' дел выполнено'),
+            h('span', null, (pendingTasks.length + pendingHabits.length + overdueTasks.length) + ' осталось · ' + upcomingRows.length + ' впереди'))),
+        section('Выполнено', completedRows.length, completedRows, 'Пока ничего не отмечено.'),
+        section('Предстоит', pendingRows.length, pendingRows, 'На сегодня больше ничего не осталось.'),
+        pastRows.length ? section('Уже прошло', pastRows.length, pastRows, '') : null,
+        h('div', { class: 'sheet-pad' }),
+      );
+    },
+  });
+}
 function persistWidgetOrder(grid) {
   const settings = S.settings();
   const byId = new Map(settings.widgets.map((widget) => [widget.id, widget]));
@@ -44,7 +99,7 @@ function bindWidgetDrag(card, grid) {
   let startX = 0, startY = 0;
   let latestX = 0, latestY = 0;
   let grabOffsetX = 0, grabOffsetY = 0;
-  let dragging = false, moved = false, suppressClick = false;
+  let dragging = false, moved = false;
   let placeholder = null;
   let preview = null;
 
@@ -245,8 +300,6 @@ function bindWidgetDrag(card, grid) {
         );
       }
       if (moved) persistWidgetOrder(grid);
-      suppressClick = true;
-      setTimeout(() => { suppressClick = false; }, 450);
     } else if (placeholder) {
       placeholder.remove();
       placeholder = null;
@@ -302,10 +355,13 @@ function bindWidgetDrag(card, grid) {
   card.addEventListener('pointercancel', finish);
   card.addEventListener('lostpointercapture', finish);
   card.addEventListener('click', (event) => {
-    if (!suppressClick) return;
+    if (event.target.closest && event.target.closest('.widget-edit-remove')) return;
     event.preventDefault();
     event.stopPropagation();
-    suppressClick = false;
+    event.stopImmediatePropagation();
+  }, true);
+  card.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); }
   }, true);
 }
 
@@ -353,6 +409,8 @@ const WIDGET_DESCRIPTIONS = {
 function makeWidgetCard(widget, index, ctx, grid) {
   const content = RENDER[widget.id] ? RENDER[widget.id](ctx, index) : null;
   if (!content || !widgetsEditMode) return content;
+  const contentLayer = h('div', { class: 'widget-edit-content' }, content);
+  contentLayer.setAttribute('inert', '');
   const card = h('div', { class: 'widget-edit-card' + (WIDE.has(widget.id) ? ' wide' : ''), 'data-widget-id': widget.id },
     h('div', { class: 'widget-edit-tools' },
       h('button', { type: 'button', class: 'widget-edit-remove', 'aria-label': 'Удалить виджет ' + (TITLES[widget.id]?.[0] || widget.id), onclick: (event) => {
@@ -360,7 +418,7 @@ function makeWidgetCard(widget, index, ctx, grid) {
         S.setSettings({ widgets: S.settings().widgets.map((item) => item.id === widget.id ? { ...item, on: false } : item) });
         document.dispatchEvent(new CustomEvent('rerender'));
       } }, ic('trash', 17))),
-    content);
+    contentLayer);
   bindWidgetDrag(card, grid);
   return card;
 }
@@ -399,11 +457,12 @@ export function todayScreen() {
 }
 
 const RENDER = {
-  day({ data, today }, i) {
+  day({ data, today, items }, i) {
     const s = dayScore(data, data.idx, today);
     return widgetShell('day', i, h('div', { class: 'w-center' },
       ring({ key: 'w-day', pct: s.pct, size: 92, stroke: 11, color: 'blue', center: h('div', { class: 'ring-big' }, h('b', null, Math.round(s.pct * 100)), h('small', null, '%')) }),
-      h('div', { class: 'w-sub' }, s.total ? `${s.done} из ${s.total} дел` : 'Дел нет')));
+      h('div', { class: 'w-sub' }, s.total ? `${s.done} из ${s.total} дел` : 'Дел нет')),
+    { onClick: () => openTodayStats(data, today, items) });
   },
 
   next({ items, today }, i) {
