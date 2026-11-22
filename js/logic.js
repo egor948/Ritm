@@ -439,9 +439,18 @@ export function buildReminders(data, idx, now = new Date(), horizonDays = 14, de
           push(`tk:${t.id}`, localDate(t.date, t.remindAt), t.title, `Время: ${t.remindAt}`, `tk-${t.id}`, '#/tasks');
         }
       }
+      const seenTaskReminderTimes = new Set();
+      const taskDueAt = t.date
+        ? (t.time ? localDate(t.date, t.time) : localDate(addDays(t.date, 1), '00:00'))
+        : null;
       for (const r of (t.reminders || [])) {
         if (!r.date || !r.time) continue;
-        push(`tkr:${t.id}:${r.id}`, localDate(r.date, r.time), t.title, 'Напоминание о задаче', `tkr-${t.id}-${r.id}`, '#/tasks');
+        const when = localDate(r.date, r.time);
+        if (taskDueAt && when.getTime() >= taskDueAt.getTime()) continue;
+        const fireKey = when.getTime();
+        if (seenTaskReminderTimes.has(fireKey)) continue;
+        seenTaskReminderTimes.add(fireKey);
+        push(`tkr:${t.id}:${r.id}`, when, t.title, 'Напоминание о задаче', `tkr-${t.id}-${r.id}`, '#/tasks');
       }
     }
   }
