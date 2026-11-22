@@ -305,19 +305,28 @@ test('напоминания задачи: одинаковое время не 
   const now = new Date(2026, 10, 15, 12, 0, 0);
   const data = {
     events: [],
-    tasks: [{
-      id: 'due-task', title: 'Сдать отчёт', date: '2026-11-16', time: '12:00', done: false,
-      reminders: [
-        { id: 'early-a', date: '2026-11-16', time: '11:30' },
-        { id: 'early-b', date: '2026-11-16', time: '11:30' },
-        { id: 'at-due', date: '2026-11-16', time: '12:00' },
-        { id: 'after-due', date: '2026-11-16', time: '12:01' },
-      ],
-    }],
+    tasks: [
+      {
+        id: 'due-task', title: 'Сдать отчёт', date: '2026-11-16', time: '12:00', done: false,
+        reminders: [
+          { id: 'early-a', date: '2026-11-16', time: '11:30' },
+          { id: 'early-b', date: '2026-11-16', time: '11:30' },
+          { id: 'at-due', date: '2026-11-16', time: '12:00' },
+          { id: 'after-due', date: '2026-11-16', time: '12:01' },
+        ],
+      },
+      {
+        id: 'date-only', title: 'Задача на день', date: '2026-11-16', done: false,
+        reminders: [
+          { id: 'last-minute', date: '2026-11-16', time: '23:59' },
+          { id: 'next-day', date: '2026-11-17', time: '00:00' },
+        ],
+      },
+    ],
     habits: [], goals: [],
   };
   const reminders = L.buildReminders(data, new Map(), now, 3);
-  assert.deepEqual(reminders.map((item) => item.id), ['tkr:due-task:early-a']);
+  assert.deepEqual(reminders.map((item) => item.id), ['tkr:due-task:early-a', 'tkr:date-only:last-minute']);
 });
 
 test('независимые напоминания сохраняются даже без даты задачи и не отправляются после выполнения', () => {
