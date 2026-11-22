@@ -46,6 +46,7 @@ function bindWidgetDrag(card, grid) {
   let grabOffsetX = 0, grabOffsetY = 0;
   let dragging = false, moved = false, suppressClick = false;
   let placeholder = null;
+  let preview = null;
 
   const captureLayout = () => new Map(
     [...grid.children]
@@ -126,8 +127,10 @@ function bindWidgetDrag(card, grid) {
     if (!dragging || !placeholder) return;
 
     // Карточка физически следует за указателем, сохраняя точку захвата.
-    card.style.left = (latestX - grabOffsetX) + 'px';
-    card.style.top = (latestY - grabOffsetY) + 'px';
+    if (preview) {
+      preview.style.left = (latestX - grabOffsetX) + 'px';
+      preview.style.top = (latestY - grabOffsetY) + 'px';
+    }
     movePlaceholder(latestX, latestY);
 
     // Автопрокрутка списка, если перетаскиваемый виджет подошёл к краю экрана.
@@ -164,26 +167,36 @@ function bindWidgetDrag(card, grid) {
     if (card.classList.contains('wide')) placeholder.style.gridColumn = '1 / -1';
     grid.insertBefore(placeholder, card);
 
-    // Выносим саму карточку на верхний слой: она не занимает место в сетке,
-    // а вместо неё сетка сразу получает живой placeholder.
-    card.classList.add('dragging');
-    card.style.position = 'fixed';
-    card.style.left = rect.left + 'px';
-    card.style.top = rect.top + 'px';
+    // Исходная карточка остаётся в сетке и сохраняет pointer capture.
+    // Её место занимает placeholder, а визуальная копия следует за пальцем.
+    card.classList.add('drag-source');
+    const gridRect = grid.getBoundingClientRect();
+    card.style.position = 'absolute';
+    card.style.left = (rect.left - gridRect.left) + 'px';
+    card.style.top = (rect.top - gridRect.top) + 'px';
     card.style.width = rect.width + 'px';
     card.style.height = rect.height + 'px';
     card.style.margin = '0';
-    card.style.transformOrigin = grabOffsetX + 'px ' + grabOffsetY + 'px';
-    document.body.appendChild(card);
-    if (card.setPointerCapture) {
-      try { card.setPointerCapture(pointerId); } catch (_) { /* capture уже установлен */ }
-    }
+    card.style.opacity = '0';
+
+    preview = card.cloneNode(true);
+    preview.classList.remove('drag-source');
+    preview.classList.add('widget-edit-preview');
+    preview.setAttribute('aria-hidden', 'true');
+    preview.style.position = 'fixed';
+    preview.style.left = rect.left + 'px';
+    preview.style.top = rect.top + 'px';
+    preview.style.width = rect.width + 'px';
+    preview.style.height = rect.height + 'px';
+    preview.style.transformOrigin = grabOffsetX + 'px ' + grabOffsetY + 'px';
+    document.body.appendChild(preview);
+
     scheduleFrame();
     animateLayout(before);
   };
 
   const clearFloatingStyle = () => {
-    for (const property of ['position', 'left', 'top', 'width', 'height', 'margin', 'transform', 'transform-origin']) {
+    for (const property of ['position', 'left', 'top', 'width', 'height', 'margin', 'opacity']) {
       card.style.removeProperty(property);
     }
   };
@@ -199,15 +212,19 @@ function bindWidgetDrag(card, grid) {
     if (dragging && placeholder && placeholder.isConnected) {
       // Применяем последнюю координату даже если отпускание произошло
       // между двумя кадрами анимации.
-      card.style.left = (latestX - grabOffsetX) + 'px';
-      card.style.top = (latestY - grabOffsetY) + 'px';
+      if (preview) {
+        preview.style.left = (latestX - grabOffsetX) + 'px';
+        preview.style.top = (latestY - grabOffsetY) + 'px';
+      }
       movePlaceholder(latestX, latestY);
 
-      const releaseRect = card.getBoundingClientRect();
+      const releaseRect = preview ? preview.getBoundingClientRect() : card.getBoundingClientRect();
       placeholder.replaceWith(card);
       placeholder = null;
-      card.classList.remove('dragging');
+      card.classList.remove('drag-source');
       clearFloatingStyle();
+      if (preview) preview.remove();
+      preview = null;
 
       const finalRect = card.getBoundingClientRect();
       const dx = releaseRect.left - finalRect.left;
@@ -230,12 +247,16 @@ function bindWidgetDrag(card, grid) {
     } else if (placeholder) {
       placeholder.remove();
       placeholder = null;
+      if (preview) preview.remove();
+      preview = null;
+      card.classList.remove('drag-source');
+      clearFloatingStyle();
     }
 
     pointerId = null;
     dragging = false;
     moved = false;
-    card.classList.remove('dragging');
+    card.classList.remove('dragging', 'drag-source');
     if (card.hasPointerCapture && card.hasPointerCapture(releasedPointerId)) {
       try { card.releasePointerCapture(releasedPointerId); } catch (_) { /* pointer уже освобождён */ }
     }
