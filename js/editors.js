@@ -34,7 +34,7 @@ function offerPushPromptForNewReminder() {
     const state = Push.state();
     // Если разрешение уже выдано, уведомления уже работают или браузер
     // не поддерживает Web Push, не отвлекаем пользователя повторным вопросом.
-    if (!state.supported || state.permission !== 'default' || state.subscribed) return;
+    if (!state.supported || state.permission === 'denied' || state.subscribed) return;
 
     openSheet({
       title: '',
