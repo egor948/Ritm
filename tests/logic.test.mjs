@@ -326,7 +326,12 @@ test('напоминания задачи: одинаковое время не 
     habits: [], goals: [],
   };
   const reminders = L.buildReminders(data, new Map(), now, 3);
-  assert.deepEqual(reminders.map((item) => item.id), ['tkr:due-task:early-a', 'tkr:date-only:last-minute']);
+  assert.deepEqual(reminders.map((item) => item.id), [
+    'tkr:due-task:early-a',
+    'tkr:due-task:at-due',
+    'tkr:date-only:last-minute',
+  ]);
+  assert.equal(new Date(reminders[1].fireAt).getTime(), new Date(2026, 10, 16, 12, 0).getTime());
 });
 
 test('независимые напоминания сохраняются даже без даты задачи и не отправляются после выполнения', () => {
