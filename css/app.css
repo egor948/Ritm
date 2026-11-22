@@ -513,7 +513,7 @@ small { font-size: 12px; }
 .mc-blank { display: block; }
 
 /* ---------- виджеты «Сегодня» ---------- */
-.widgets { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.widgets { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .widget { position: relative; overflow: hidden; display: flex; flex-direction: column; min-height: 158px; padding: 14px; border-radius: 26px; background: linear-gradient(160deg, color-mix(in srgb, var(--c) 9%, var(--surface)), var(--surface) 62%); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02); }
 .widget.wide { grid-column: 1 / -1; min-height: 0; }
 .w-head { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 13px; font-weight: 700; color: var(--c); }
@@ -1090,20 +1090,27 @@ small { font-size: 12px; }
   box-shadow: 0 1px 5px rgba(0,0,0,.10), inset 0 0 0 .5px var(--sep);
 }
 .widget-edit-remove { color: var(--c-red); }
-.widget-edit-card.dragging {
+.widget-edit-card.drag-source {
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+.widget-edit-preview {
   position: fixed !important;
   z-index: 10000 !important;
-  opacity: 1 !important;
+  display: flex !important;
+  align-items: stretch;
+  box-sizing: border-box;
+  margin: 0 !important;
   pointer-events: none !important;
-  outline: 0 !important;
-  cursor: grabbing;
-  will-change: left, top, transform;
+  opacity: .99 !important;
+  border-radius: 27px;
+  outline: .5px solid color-mix(in srgb, var(--label) 12%, transparent);
+  box-shadow: 0 20px 48px rgba(0,0,0,.22), 0 5px 14px rgba(0,0,0,.10);
   transform: scale(1.035);
   filter: saturate(1.04);
+  will-change: left, top, transform;
 }
-.widget-edit-card.dragging > .widget {
-  box-shadow: 0 20px 48px rgba(0,0,0,.22), 0 5px 14px rgba(0,0,0,.10);
-}
+.widget-edit-preview > .widget { height: 100%; }
 .widget-drag-placeholder {
   min-width: 0;
   min-height: 158px;
