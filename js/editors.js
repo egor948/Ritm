@@ -1,6 +1,7 @@
 // Редакторы: задача, событие, привычка, цель + быстрое добавление и подтверждения.
 import { h, uid, todayStr, addDays, fromMin, toMin, ymd, localDate, clear, WD_SHORT, plural, captureScrollPosition, restoreScrollPosition } from './util.js';
 import * as S from './store.js';
+import * as Push from './push.js';
 import { DEFAULT_CALENDAR_ID, calendarOptions } from './calendars.js';
 import { REPEAT_LABELS, isReminderInFuture, isDateNotPast } from './logic.js';
 import {
@@ -9,6 +10,71 @@ import {
 } from './ui.js';
 
 const CATEGORIES = ['Здоровье', 'Карьера', 'Обучение', 'Финансы', 'Отношения', 'Личное'];
+
+const PUSH_PROMPT_KEY = 'rhythm.push-prompt.v1';
+let pushPromptHandled = false;
+
+function rememberPushPromptChoice() {
+  pushPromptHandled = true;
+  try { localStorage.setItem(PUSH_PROMPT_KEY, '1'); } catch (_) { /* приватный режим */ }
+}
+
+/** Предлагает включить push после сохранения первого нового напоминания на устройстве. */
+function offerPushPromptForNewReminder() {
+  setTimeout(async () => {
+    if (pushPromptHandled) return;
+    try {
+      if (localStorage.getItem(PUSH_PROMPT_KEY) === '1') {
+        pushPromptHandled = true;
+        return;
+      }
+    } catch (_) { /* используем флаг текущей сессии */ }
+
+    await Push.refresh().catch(() => {});
+    const state = Push.state();
+    // Если разрешение уже выдано, уведомления уже работают или браузер
+    // не поддерживает Web Push, не отвлекаем пользователя повторным вопросом.
+    if (!state.supported || state.permission !== 'default' || state.subscribed) return;
+
+    openSheet({
+      title: '',
+      left: null,
+      right: null,
+      cls: 'action',
+      onClose: rememberPushPromptChoice,
+      build(api) {
+        api.body.append(
+          h('div', { class: 'as-card push-prompt-card' },
+            h('div', { class: 'push-prompt-head' },
+              h('div', { class: 'push-prompt-icon' }, ic('bell', 25)),
+              h('b', null, 'Включить push-уведомления?'),
+              h('span', null, 'Разрешите «Ритму» присылать напоминания о задачах и событиях, даже когда приложение закрыто.')),
+            h('button', {
+              type: 'button',
+              class: 'as-btn push-prompt-enable',
+              onclick: async () => {
+                api.close();
+                try {
+                  const enabled = await Push.enable();
+                  if (!enabled) {
+                    const message = Push.state().hint;
+                    if (message) toast(message);
+                  }
+                } catch (error) {
+                  toast(error.message || 'Не удалось включить уведомления');
+                }
+              },
+            }, 'Включить'),
+            h('button', {
+              type: 'button',
+              class: 'as-btn push-prompt-later',
+              onclick: () => api.close(),
+            }, 'Позже')),
+        );
+      },
+    });
+  }, 440);
+}
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 export function goalOptions(data, { allowNone = true, noneLabel = 'Без цели' } = {}) {
@@ -23,11 +89,17 @@ export function goalOptions(data, { allowNone = true, noneLabel = 'Без цел
 const shake = (el) => el && el.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(0)' }], { duration: 320 });
 
 /** Общий каркас редактора: черновик, перерисовка по структурным изменениям, сохранение, удаление. */
-function editorShell({ title, draft, draw, onSave, onDelete, deleteLabel = 'Удалить', valid, onClose }) {
+function editorShell({ title, draft, draw, onSave, onDelete, deleteLabel = 'Удалить', valid, onClose, afterSave }) {
   return openSheet({
     title, tall: true, onClose,
     left: { label: 'Отмена' },
-    right: { label: 'Готово', bold: true, onClick: (api) => { const err = valid && valid(draft); if (err) { toast(err); return; } onSave(draft); api.close(true); } },
+    right: { label: 'Готово', bold: true, onClick: (api) => {
+      const err = valid && valid(draft);
+      if (err) { toast(err); return; }
+      onSave(draft);
+      api.close(true);
+      if (afterSave) setTimeout(() => afterSave(draft), 440);
+    } },
     build(api) {
       const redraw = () => {
         const scroll = captureScrollPosition(api.body);
@@ -271,6 +343,11 @@ export function editTask(task, defaults = {}) {
       // Старые поля больше не используются после миграции в массив.
       out.reminderMin = null; out.remindAt = null;
       S.upsert('tasks', out);
+    },
+    afterSave: (d) => {
+      if (d.reminders.some((reminder) => !originalReminders.has(reminder.id))) {
+        offerPushPromptForNewReminder();
+      }
     },
     onDelete: isNew ? null : (api) => {
       const inv = S.remove('tasks', task.id);
@@ -568,6 +645,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
   const source = ev || defaults;
   const draft = ev ? { ...base, ...ev, reminders: eventReminderDraft(source), repeat: { ...base.repeat, ...(ev.repeat || {}) } } : { ...base, ...defaults, reminders: eventReminderDraft(source) };
   const originalDate = ev ? (ev.date || null) : null;
+  const originalEventReminderIds = new Set(draft.reminders.map((reminder) => reminder.id));
   let dateWasChanged = false;
   return editorShell({
     title: isNew ? 'Новое событие' : 'Событие',
@@ -580,6 +658,11 @@ export function editEvent(ev, defaults = {}, occDate = null) {
       if (out.repeat.freq === 'none') out.repeat = { freq: 'none' };
       else if (out.repeat.freq !== 'weekly') out.repeat = { freq: out.repeat.freq, interval: out.repeat.interval || 1, until: out.repeat.until || null };
       S.upsert('events', out);
+    },
+    afterSave: (d) => {
+      if (d.reminders.some((reminder) => !originalEventReminderIds.has(reminder.id))) {
+        offerPushPromptForNewReminder();
+      }
     },
     onDelete: isNew ? null : (api) => {
       const repeating = ev.repeat && ev.repeat.freq && ev.repeat.freq !== 'none';
@@ -654,6 +737,7 @@ export function editHabit(habit, defaults = {}) {
   const draft = habit ? { ...habit, schedule: { ...(habit.schedule || { type: 'daily' }) } }
     : { title: '', emoji: '🌱', color: 'green', type: 'check', target: 1, unit: '', schedule: { type: 'daily', days: [], perWeek: 3 }, time: null, remind: false, goalId: null, startDate: todayStr(), ...defaults };
   const data = S.data();
+  const originallyHadHabitReminder = !!(habit && habit.remind && habit.time);
   return editorShell({
     title: isNew ? 'Новая привычка' : 'Привычка',
     draft,
@@ -663,6 +747,11 @@ export function editHabit(habit, defaults = {}) {
       if (out.type === 'check') { out.target = 1; out.unit = ''; }
       if (!out.time) out.remind = false;
       S.upsert('habits', out);
+    },
+    afterSave: (d) => {
+      if (!originallyHadHabitReminder && d.remind && d.time) {
+        offerPushPromptForNewReminder();
+      }
     },
     onDelete: isNew ? null : (api) => {
       const inv = S.remove('habits', habit.id);
