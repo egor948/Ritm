@@ -153,7 +153,9 @@ function changedDateIsPast(date, originalDate, explicitlyChanged = false) {
 function taskReminderBoundary(taskDate, taskTime) {
   if (!taskDate) return null;
   const due = taskTime ? localDate(taskDate, taskTime) : localDate(addDays(taskDate, 1), '00:00');
-  const latest = new Date(due.getTime() - 60000);
+  // Для задачи со временем разрешаем напоминание ровно в момент срока.
+  // У задачи без времени крайним моментом остаётся 23:59 указанной даты.
+  const latest = taskTime ? due : new Date(due.getTime() - 60000);
   return { date: ymd(latest), time: fromMin(latest.getHours() * 60 + latest.getMinutes()) };
 }
 
@@ -220,7 +222,7 @@ function remindersGroup(d, redraw, defaultDate) {
       }
       if (reminderIsAfterTask({ ...reminder, date: v }, d.date, d.time)) {
         date.querySelector('input').value = reminder.date;
-        toast('Напоминание должно быть раньше срока задачи');
+        toast('Напоминание не может быть позже срока задачи');
         return;
       }
       if (d.reminders.some((item) => item.id !== reminder.id && item.date === v && item.time === reminder.time)) {
@@ -239,7 +241,7 @@ function remindersGroup(d, redraw, defaultDate) {
       }
       if (reminderIsAfterTask({ ...reminder, time: v }, d.date, d.time)) {
         time.querySelector('input').value = reminder.time;
-        toast('Напоминание должно быть раньше срока задачи');
+        toast('Напоминание не может быть позже срока задачи');
         return;
       }
       if (d.reminders.some((item) => item.id !== reminder.id && item.date === reminder.date && item.time === v)) {
@@ -335,7 +337,7 @@ export function editTask(task, defaults = {}) {
     valid: (d) => (!d.title.trim() ? 'Введите название задачи'
       : changedDateIsPast(d.date, originalDate, dateWasChanged) ? 'Нельзя назначить задачу на прошедшую дату'
         : changedReminderIsPast(d.reminders, originalReminders) ? 'Дата и время нового напоминания должны быть в будущем'
-          : d.reminders.some((r) => reminderIsAfterTask(r, d.date, d.time)) ? 'Напоминание должно быть раньше срока задачи'
+          : d.reminders.some((r) => reminderIsAfterTask(r, d.date, d.time)) ? 'Напоминание не может быть позже срока задачи'
             : hasDuplicateTaskReminders(d.reminders) ? 'Уберите повторяющиеся напоминания' : null),
     onSave: (d) => {
       const out = { ...d, title: d.title.trim(), priority: normalizePriority(d.priority), checklist: d.checklist.filter((c) => c.text.trim()) };
