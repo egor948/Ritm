@@ -48,15 +48,16 @@ function offerPushPromptForNewReminder() {
             h('div', { class: 'push-prompt-head' },
               h('div', { class: 'push-prompt-icon' }, ic('bell', 25)),
               h('b', null, 'Включить push-уведомления?'),
-              h('span', null, 'Разрешите «Ритму» присылать напоминания о задачах и событиях, даже когда приложение закрыто.')),
+              h('span', null, 'Разрешите «Ритму» присылать напоминания на этом устройстве. Для доставки, когда приложение закрыто, войдите в аккаунт Ritm.')),
             h('button', {
               type: 'button',
               class: 'as-btn push-prompt-enable',
               onclick: async () => {
-                api.close();
+                api.close(true);
                 try {
                   const enabled = await Push.enable();
-                  if (!enabled) {
+                  if (enabled) rememberPushPromptChoice();
+                  else {
                     const message = Push.state().hint;
                     if (message) toast(message);
                   }
