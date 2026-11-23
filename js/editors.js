@@ -919,7 +919,8 @@ export function editEvent(ev, defaults = {}, occDate = null) {
           !isNew ? h('button', { type: 'button', class: 'row-btn', onclick: () => {
             const sourceDate = occDate || d.date;
             const spanDays = d.endDate && d.endDate > d.date ? eventDateDiff(d.date, d.endDate) : 0;
-            const targetDate = addDays(sourceDate, 1);
+            const nextDate = addDays(sourceDate, 1);
+            const targetDate = nextDate < todayStr() ? todayStr() : nextDate;
             const copy = {
               ...d,
               date: targetDate,
