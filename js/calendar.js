@@ -163,12 +163,24 @@ function moveItem(it, date, startMin) {
     return;
   }
   const e = it.ref;
-  const dur = it.endMin - it.startMin;
   const repeating = e.repeat && e.repeat.freq && e.repeat.freq !== 'none';
-  const patch = { id: e.id, start: fromMin(startMin), end: fromMin(Math.min(1439, startMin + dur)) };
+  const multiDay = !!(e.endDate && e.endDate > e.date);
+  const patch = { id: e.id, start: fromMin(startMin) };
+  if (multiDay) {
+    const originalDays = Math.round((Date.parse(e.endDate + 'T00:00:00Z') - Date.parse(e.date + 'T00:00:00Z')) / 86400000);
+    const duration = originalDays * 1440 + toMin(e.end || '00:00') - toMin(e.start || '00:00');
+    const total = startMin + duration;
+    const endOffset = Math.floor(total / 1440);
+    patch.end = fromMin(total % 1440);
+    patch.endDate = endOffset > 0 ? addDays(repeating ? e.date : date, endOffset) : null;
+  } else {
+    const dur = it.endMin - it.startMin;
+    patch.end = fromMin(Math.min(1439, startMin + dur));
+    if (!repeating) patch.endDate = null;
+  }
   if (!repeating) patch.date = date;
   S.upsert('events', patch);
-  if (repeating && date !== it.date) toast('У повторяющегося события изменено только время');
+  if (repeating && date !== (it.occurrenceDate || it.date)) toast('У повторяющегося события изменено только время');
 }
 function resizeItem(it, durMin) {
   S.upsert('events', { id: it.id, end: fromMin(Math.min(1439, it.startMin + durMin)) });
@@ -212,13 +224,17 @@ function timeline({ dates, mode, data, filters, extraHeader }) {
         class: 'blk ' + (isTask ? 'task' : 'event') + (!isTask && it.ref.externalReadOnly ? ' external-event' : '') + (it.done ? ' done' : '') + (isTask && isTaskExitStarted(it.id) ? ' task-completion-exit' : '') + (small ? ' small' : ''),
         ...(isTask ? { 'data-task-id': it.id, 'data-task-done': it.done ? 'true' : 'false' } : {}),
         style: { top: top + 'px', height: height + 'px', left: `calc(${(lay.col / lay.cols) * 100}% + 1px)`, width: `calc(${100 / lay.cols}% - 3px)`, '--c': cv(it.color) },
-        onclick: (e) => { e.stopPropagation(); if (isTask) editTask(it.ref); else if (it.ref.externalReadOnly) openExternalEventDetails({ ...it.ref, date: it.date }); else editEvent(it.ref, {}, date); },
+        onclick: (e) => { e.stopPropagation(); if (isTask) editTask(it.ref); else if (it.ref.externalReadOnly) openExternalEventDetails({ ...it.ref, date: it.date }); else editEvent(it.ref, {}, it.occurrenceDate || it.date); },
       },
         isTask ? h('span', { class: 'blk-chk' + (it.done ? ' on' : ''), 'data-nodrag': 1, onclick: (e) => { e.stopPropagation(); completeTask(it.ref, !it.done, e.currentTarget); } }, ic('check', 11)) : null,
         h('div', { class: 'blk-text' }, h('b', null, it.title), !small && mode === 'day' ? h('span', null, `${fromMin(it.startMin)} – ${fromMin(it.endMin)}${it.type === 'event' && it.ref.location ? ' · ' + it.ref.location : ''}`) : null));
       if (!it.ref.externalReadOnly) {
-        attachDrag(block, { dur: () => it.endMin - it.startMin, getCtx: ctxFn, grab: 'top', onDrop: (d, m) => moveItem(it, d, m) });
-        if (!isTask && height >= 30) {
+        const multiDayEvent = !isTask && it.ref.endDate && it.ref.endDate > it.ref.date;
+        const isStartSegment = !multiDayEvent || it.date === (it.occurrenceDate || it.date);
+        if (isStartSegment) {
+          attachDrag(block, { dur: () => it.endMin - it.startMin, getCtx: ctxFn, grab: 'top', onDrop: (d, m) => moveItem(it, d, m) });
+        }
+        if (!isTask && !multiDayEvent && height >= 30) {
           const handle = h('div', { class: 'blk-resize', 'data-nodrag': 1 });
           block.appendChild(handle);
           attachResize(handle, block, { hourH, onResize: (dur) => resizeItem(it, dur) });
@@ -319,9 +335,29 @@ function itemRow(it, date) {
   let time = '';
   let sub = '';
   if (t === 'goal') { time = 'срок'; sub = 'Дедлайн цели'; }
-  else if (t === 'event') { const e = it.ref; time = e.allDay || !e.start ? 'весь день' : `${e.start}`; sub = e.allDay ? (e.endDate ? `до ${fmtDayMonth(e.endDate)}` : '') : `${e.start}–${e.end || ''}`; if (e.location) sub += (sub ? ' · ' : '') + e.location; }
+  else if (t === 'event') {
+    const e = it.ref;
+    if (e.allDay || !e.start) {
+      time = 'весь день';
+      sub = e.endDate ? `до ${fmtDayMonth(e.endDate)}` : '';
+    } else {
+      const occurrenceDate = it.occurrenceDate || e.date;
+      const spanDays = e.endDate && e.endDate > e.date
+        ? Math.round((Date.parse(e.endDate + 'T00:00:00Z') - Date.parse(e.date + 'T00:00:00Z')) / 86400000)
+        : 0;
+      const lastDate = addDays(occurrenceDate, spanDays);
+      if (date === occurrenceDate) {
+        time = e.start;
+        sub = `${e.start}–${e.end || ''}${spanDays ? ' · до ' + fmtDayMonth(lastDate) : ''}`;
+      } else {
+        time = date === lastDate ? 'до ' + (e.end || '') : 'весь день';
+        sub = 'Продолжение события';
+      }
+    }
+    if (e.location) sub += (sub ? ' · ' : '') + e.location;
+  }
   else { time = it.ref.time || 'задача'; sub = it.ref.time ? '' : 'Без времени'; }
-  const click = t === 'goal' ? () => openGoalDetail(it.id) : t === 'event' ? () => (it.ref.externalReadOnly ? openExternalEventDetails({ ...it.ref, date: it.date }) : editEvent(it.ref, {}, date)) : () => editTask(it.ref);
+  const click = t === 'goal' ? () => openGoalDetail(it.id) : t === 'event' ? () => (it.ref.externalReadOnly ? openExternalEventDetails({ ...it.ref, date: it.date }) : editEvent(it.ref, {}, it.occurrenceDate || it.date)) : () => editTask(it.ref);
   return h('div', { class: 'ag-item' + (it.done ? ' done' : '') + (t === 'task' && isTaskExitStarted(it.id) ? ' task-completion-exit' : ''), ...(t === 'task' ? { 'data-task-id': it.id, 'data-task-done': it.done ? 'true' : 'false' } : {}), style: { '--c': cv(it.color) }, onclick: click },
     h('div', { class: 'ai-time' }, time), h('i', { class: 'ai-bar' }),
     h('div', { class: 'ai-main' }, h('b', null, it.title), sub ? h('span', null, sub) : null),
@@ -356,7 +392,7 @@ function dayView(date, data) {
       h('span', { class: 'allday-label' }, 'весь день'),
       h('div', { class: 'allday-items' }, [
         ...it.deadlines.map((d) => h('button', { class: 'ad-chip', style: { '--c': cv(d.color) }, onclick: () => openGoalDetail(d.id) }, '🎯 ' + d.title)),
-        ...it.allDay.map((a) => h('button', { class: 'ad-chip' + (a.ref.externalReadOnly ? ' external-event' : ''), style: { '--c': cv(a.color) }, onclick: () => (a.ref.externalReadOnly ? openExternalEventDetails({ ...a.ref, date: a.date }) : editEvent(a.ref, {}, date)) }, a.title)),
+        ...it.allDay.map((a) => h('button', { class: 'ad-chip' + (a.ref.externalReadOnly ? ' external-event' : ''), style: { '--c': cv(a.color) }, onclick: () => (a.ref.externalReadOnly ? openExternalEventDetails({ ...a.ref, date: a.date }) : editEvent(a.ref, {}, a.occurrenceDate || a.date)) }, a.title)),
       ])));
   }
 
@@ -416,8 +452,32 @@ function weekView(date, data) {
       h('span', null, WD_SHORT[dow(d)]), h('b', null, parseYmd(d).getDate()),
       h('div', { class: 'wk-dots' }, it.allDay.slice(0, 2).map((a) => h('i', { style: { '--c': cv(a.color) } })), it.deadlines.length ? h('i', { style: { '--c': cv('purple') } }) : null));
   }));
+  const hasAllDay = dates.some((d) => {
+    const items = visibleDayItems(data, d, f);
+    return items.allDay.length || items.deadlines.length;
+  });
+  const allDayRow = hasAllDay ? h('div', { class: 'wk-allday-row' },
+    h('div', { class: 'wk-allday-gut' }, 'весь день'),
+    dates.map((d) => {
+      const items = visibleDayItems(data, d, f);
+      const chips = [
+        ...items.deadlines.map((goal) => h('button', {
+          type: 'button', class: 'wk-ad-chip', style: { '--c': cv(goal.color) },
+          onclick: () => openGoalDetail(goal.id),
+        }, '🎯 ' + goal.title)),
+        ...items.allDay.map((event) => h('button', {
+          type: 'button', class: 'wk-ad-chip' + (event.ref.externalReadOnly ? ' external-event' : ''),
+          style: { '--c': cv(event.color) },
+          onclick: () => event.ref.externalReadOnly
+            ? openExternalEventDetails({ ...event.ref, date: event.date })
+            : editEvent(event.ref, {}, event.occurrenceDate || event.date),
+        }, event.title)),
+      ];
+      return h('div', { class: 'wk-allday-cell' }, chips);
+    }),
+  ) : null;
   const tl = timeline({ dates, mode: 'week', data, filters: f });
-  const wrap = h('div', { class: 'cal-week' + (view.calDir ? (view.calDir > 0 ? ' in-r' : ' in-l') : '') }, head, tl);
+  const wrap = h('div', { class: 'cal-week' + (view.calDir ? (view.calDir > 0 ? ' in-r' : ' in-l') : '') }, head, allDayRow, tl);
   view.calDir = 0;
   addSwipe(wrap, () => shift('week', -1), () => shift('week', 1));
   wrap.mount = () => tl.mount();
@@ -442,7 +502,7 @@ function monthView(date, data) {
     const hb = it.habits.length;
     return h('button', { class: 'mo-cell' + (inMonth ? '' : ' out') + (d === today ? ' today' : '') + (d === date ? ' sel' : ''), onclick: () => { view.calDate = d; rerender(); } },
       h('span', { class: 'mo-num' }, parseYmd(d).getDate()),
-      h('div', { class: 'mo-chips' }, chips.slice(0, 3).map((c) => h('i', { class: 'mo-chip' + (c.type === 'task' ? ' task' : ''), style: { '--c': cv(c.color) } }, c.title)), chips.length > 3 ? h('em', null, `+${chips.length - 3}`) : null),
+      h('div', { class: 'mo-chips' }, chips.slice(0, 3).map((c) => h('i', { class: 'mo-chip' + (c.type === 'task' ? ' task' : '') + (c.type === 'event' && (c.ref.allDay || !c.ref.start) ? ' allday' : ''), style: { '--c': cv(c.color) } }, c.title)), chips.length > 3 ? h('em', null, `+${chips.length - 3}`) : null),
       h('div', { class: 'mo-dots' }, chips.slice(0, 4).map((c) => h('i', { style: { '--c': cv(c.color) } }))));
   }));
   const { rows, habits } = flatItems(data, date);
