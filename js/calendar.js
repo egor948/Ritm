@@ -450,7 +450,7 @@ function weekView(date, data) {
     const it = visibleDayItems(data, d, f);
     return h('button', { class: 'wk-day' + (d === today ? ' today' : '') + (d === date ? ' sel' : ''), onclick: () => { view.calDate = d; S.setSettings({ calView: 'day' }); } },
       h('span', null, WD_SHORT[dow(d)]), h('b', null, parseYmd(d).getDate()),
-      h('div', { class: 'wk-dots' }, it.allDay.slice(0, 2).map((a) => h('i', { style: { '--c': cv(a.color) } })), it.deadlines.length ? h('i', { style: { '--c': cv('purple') } }) : null));
+      h('div', { class: 'wk-dots' }, it.deadlines.length ? h('i', { style: { '--c': cv('purple') } }) : null));
   }));
   const hasAllDay = dates.some((d) => {
     const items = visibleDayItems(data, d, f);
