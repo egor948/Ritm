@@ -348,25 +348,34 @@ function occursOn(ev, d) {
   }
 }
 
-/** Развернуть события в экземпляры на диапазоне дат [from, to]. */
+/** Развернуть события в экземпляры и дневные фрагменты на диапазоне [from, to]. */
 export function expandEvents(events, from, to) {
   const out = [];
   for (const ev of events) {
     if (ev.deleted) continue;
     const ex = new Set(ev.exdates || []);
     const rep = ev.repeat && ev.repeat.freq && ev.repeat.freq !== 'none';
+    const storedSpan = ev.endDate && ev.endDate > ev.date ? diffDays(ev.date, ev.endDate) : 0;
+    // При окончании ровно в 00:00 следующая дата уже не занимает время события.
+    const spanDays = ev.allDay ? storedSpan : Math.max(0, storedSpan - (ev.end === '00:00' ? 1 : 0));
+    const appendSpan = (occurrenceDate) => {
+      for (let offset = 0; offset <= spanDays; offset++) {
+        const segmentDate = addDays(occurrenceDate, offset);
+        if (segmentDate < from || segmentDate > to) continue;
+        out.push(occurrence(ev, segmentDate, occurrenceDate));
+      }
+    };
     if (!rep) {
-      const last = ev.allDay && ev.endDate && ev.endDate > ev.date ? ev.endDate : ev.date;
-      const a = ev.date > from ? ev.date : from;
-      const b = last < to ? last : to;
-      for (let d = a; d <= b; d = addDays(d, 1)) out.push(occurrence(ev, d));
+      appendSpan(ev.date);
       continue;
     }
-    const a = ev.date > from ? ev.date : from;
+    // Учитываем событие, начавшееся до диапазона, но продолжающееся внутри него.
+    const earliest = addDays(from, -spanDays);
+    const a = ev.date > earliest ? ev.date : earliest;
     const b = ev.repeat.until && ev.repeat.until < to ? ev.repeat.until : to;
     for (let d = a; d <= b; d = addDays(d, 1)) {
       if (ex.has(d)) continue;
-      if (occursOn(ev, d)) out.push(occurrence(ev, d));
+      if (occursOn(ev, d)) appendSpan(d);
     }
   }
   return out;
@@ -388,7 +397,7 @@ export function isReminderInFuture(reminder, now = new Date()) {
   return localDate(reminder.date, reminder.time).getTime() > now.getTime();
 }
 
-const occurrence = (ev, date) => ({ type: 'event', id: ev.id, key: `${ev.id}@${date}`, date, ref: ev });
+const occurrence = (ev, date, occurrenceDate = date) => ({ type: 'event', id: ev.id, key: occurrenceDate === date ? `${ev.id}@${date}` : `${ev.id}@${occurrenceDate}:${date}`, date, occurrenceDate, ref: ev });
 
 // =====================================================================
 // Элементы дня для календаря
@@ -420,10 +429,16 @@ export function dayItems(data, date, opts = {}) {
       const e = o.ref;
       if (e.allDay || !e.start) allDay.push({ ...o, title: e.title, color: eventColor(e) });
       else {
-        const s = toMin(e.start);
-        let en = e.end ? toMin(e.end) : s + 60;
-        if (en <= s) en = Math.min(1440, s + 30);
-        timed.push({ ...o, title: e.title, color: eventColor(e), startMin: s, endMin: en });
+        const occurrenceDate = o.occurrenceDate || e.date;
+        const spanDays = e.endDate && e.endDate > e.date ? diffDays(e.date, e.endDate) : 0;
+        const offset = diffDays(occurrenceDate, date);
+        const startMin = offset > 0 ? 0 : toMin(e.start);
+        let endMin = offset < spanDays ? 1440 : (e.end ? toMin(e.end) : startMin + 60);
+        if (endMin <= startMin) {
+          if (offset > 0 || endMin === 0) continue;
+          endMin = Math.min(1440, startMin + 30);
+        }
+        timed.push({ ...o, occurrenceDate, title: e.title, color: eventColor(e), startMin, endMin });
       }
     }
   }
