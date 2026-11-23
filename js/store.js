@@ -9,7 +9,7 @@ let deviceTheme = null;
 let storageKey = KEY;
 const accountKey = (userId) => userId ? `${KEY}.account.${userId}` : KEY;
 export const DEFAULT_CALENDAR_ID = 'calendar-default';
-export const KINDS = ['goals', 'tasks', 'events', 'habits', 'logs', 'calendars'];
+export const KINDS = ['goals', 'tasks', 'events', 'eventPresets', 'habits', 'logs', 'calendars'];
 
 function ensureCalendarState(s) {
   if (!Array.isArray(s.calendars)) s.calendars = [];
@@ -69,7 +69,7 @@ const defaultSettings = () => ({
 
 const emptyState = () => ({
   v: 1,
-  goals: [], tasks: [], events: [], habits: [], logs: [], calendars: [],
+  goals: [], tasks: [], events: [], eventPresets: [], habits: [], logs: [], calendars: [],
   settings: defaultSettings(),
   dirty: {}, // 'kind:id' → 1, ожидают отправки на сервер
   sync: { cursor: null, lastSyncAt: 0 },
@@ -151,6 +151,7 @@ export function data() {
     habits: live(state.habits),
     logs: live(state.logs),
     calendars: live(state.calendars),
+    eventPresets: live(state.eventPresets),
     settings: state.settings,
   };
   snap.idx = buildLogIndex(snap.logs);
@@ -362,8 +363,8 @@ export function applyRemote(rows) {
 
 // ---------- Экспорт / импорт ----------
 export function exportJSON() {
-  const { goals, tasks, events, habits, logs, calendars } = state;
-  return JSON.stringify({ app: 'rhythm', version: 1, exportedAt: new Date().toISOString(), goals, tasks, events, habits, logs, calendars, settings: syncableSettings() }, null, 2);
+  const { goals, tasks, events, eventPresets, habits, logs, calendars } = state;
+  return JSON.stringify({ app: 'rhythm', version: 1, exportedAt: new Date().toISOString(), goals, tasks, events, eventPresets, habits, logs, calendars, settings: syncableSettings() }, null, 2);
 }
 export function importJSON(text, { replace = true } = {}) {
   const obj = JSON.parse(text);
