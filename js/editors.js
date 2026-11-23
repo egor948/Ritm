@@ -735,11 +735,12 @@ function scheduleEventPreset(preset) {
         const fields = [row('Дата', date, { icon: 'calendar', iconColor: 'red' })];
         if (!allDay) fields.push(row('Время начала', timeInput(slot.start, (value) => { slot.start = value; }, { clearable: false }), { icon: 'clock', iconColor: 'blue' }));
         const card = h('div', { class: 'group preset-slot' }, ...fields);
-        if (slots.length > 1) card.appendChild(h('button', {
+        card.appendChild(h('button', {
           type: 'button',
           class: 'preset-slot-remove',
           'aria-label': 'Удалить дату',
           onclick: () => {
+            if (slots.length <= 1) { toast('Оставьте хотя бы одну дату'); return; }
             const index = slots.findIndex((item) => item.id === slot.id);
             if (index >= 0) slots.splice(index, 1);
             card.remove();
