@@ -641,6 +641,170 @@ function eventRemindersGroup(d) {
   return list;
 }
 
+function eventDateDiff(from, to) {
+  const a = from.split('-').map(Number);
+  const b = to.split('-').map(Number);
+  return Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
+}
+
+function saveEventPreset(d) {
+  if (!d.title || !d.title.trim()) { toast('Сначала укажите название события'); return; }
+  const days = d.endDate && d.endDate > d.date ? eventDateDiff(d.date, d.endDate) : 0;
+  const durationDays = Math.max(1, days + 1);
+  const durationMinutes = Math.max(1, days * 1440 + toMin(d.end || '11:00') - toMin(d.start || '10:00'));
+  S.upsert('eventPresets', {
+    name: d.title.trim(),
+    title: d.title.trim(),
+    allDay: !!d.allDay,
+    start: d.allDay ? null : (d.start || '10:00'),
+    end: d.allDay ? null : (d.end || '11:00'),
+    durationMinutes,
+    durationDays,
+    color: d.color || 'blue',
+    colorOverride: !!d.colorOverride,
+    calendarId: d.calendarId || DEFAULT_CALENDAR_ID,
+    location: d.location || '',
+    notes: d.notes || '',
+    reminders: (d.reminders || []).map((reminder) => ({ amount: Number(reminder.amount), unit: reminder.unit })),
+  });
+  toast('Шаблон события сохранён');
+}
+
+function scheduleEventPreset(preset) {
+  const allDay = !!preset.allDay;
+  const slots = [{ id: uid(), date: todayStr(), start: preset.start || '10:00' }];
+  const durationDays = Math.max(1, Number(preset.durationDays) || 1);
+  const durationMinutes = Math.max(1, Number(preset.durationMinutes)
+    || (toMin(preset.end || '11:00') - toMin(preset.start || '10:00')) || 60);
+
+  openSheet({
+    title: 'Расставить по датам',
+    left: { label: 'Отмена' },
+    right: { label: 'Создать', bold: true, onClick: (api) => {
+      if (!slots.length) { toast('Добавьте хотя бы одну дату'); return; }
+      if (slots.some((slot) => !slot.date || !isDateNotPast(slot.date))) {
+        toast('Выберите сегодняшнюю или будущую дату для каждого события');
+        return;
+      }
+      const duplicateKeys = new Set();
+      for (const slot of slots) {
+        const key = slot.date + '|' + (allDay ? 'all-day' : slot.start);
+        if (duplicateKeys.has(key)) { toast('Уберите одинаковые даты и время'); return; }
+        duplicateKeys.add(key);
+      }
+      const calendars = S.data().calendars;
+      const calendarId = calendars.some((calendar) => calendar.id === preset.calendarId)
+        ? preset.calendarId : DEFAULT_CALENDAR_ID;
+      for (const slot of slots) {
+        let end = null;
+        let endDate = null;
+        let start = null;
+        if (allDay) {
+          if (durationDays > 1) endDate = addDays(slot.date, durationDays - 1);
+        } else {
+          start = slot.start || preset.start || '10:00';
+          const total = toMin(start) + durationMinutes;
+          const offset = Math.floor(total / 1440);
+          end = fromMin(total % 1440);
+          if (offset > 0) endDate = addDays(slot.date, offset);
+        }
+        S.upsert('events', {
+          title: preset.title || preset.name || 'Событие',
+          date: slot.date,
+          start,
+          end,
+          endDate,
+          allDay,
+          color: preset.color || 'blue',
+          colorOverride: !!preset.colorOverride,
+          calendarId,
+          location: preset.location || '',
+          notes: preset.notes || '',
+          reminderMin: null,
+          reminders: (preset.reminders || []).map((reminder) => ({ id: uid(), amount: Number(reminder.amount), unit: reminder.unit })),
+          repeat: { freq: 'none' },
+        });
+      }
+      api.close(true);
+      toast('Создано событий: ' + slots.length);
+    } },
+    build(api) {
+      const list = h('div', { class: 'preset-slots' });
+      const renderSlot = (slot) => {
+        const date = dateInput(slot.date, (value) => { slot.date = value || slot.date; }, { clearable: false, min: todayStr() });
+        const fields = [row('Дата', date, { icon: 'calendar', iconColor: 'red' })];
+        if (!allDay) fields.push(row('Время начала', timeInput(slot.start, (value) => { slot.start = value; }, { clearable: false }), { icon: 'clock', iconColor: 'blue' }));
+        const card = h('div', { class: 'group preset-slot' }, ...fields);
+        if (slots.length > 1) card.appendChild(h('button', {
+          type: 'button',
+          class: 'preset-slot-remove',
+          'aria-label': 'Удалить дату',
+          onclick: () => {
+            const index = slots.findIndex((item) => item.id === slot.id);
+            if (index >= 0) slots.splice(index, 1);
+            card.remove();
+          },
+        }, ic('x', 16)));
+        list.appendChild(card);
+      };
+      slots.forEach(renderSlot);
+      api.body.append(
+        groupNote('Шаблон «' + (preset.name || preset.title || 'Событие') + '». Длительность и остальные параметры сохраняются; для каждой даты можно задать своё время начала.'),
+        list,
+        h('button', { type: 'button', class: 'add-row', onclick: () => {
+          const previous = slots[slots.length - 1];
+          slots.push({ id: uid(), date: addDays(previous.date, 1), start: previous.start || preset.start || '10:00' });
+          renderSlot(slots[slots.length - 1]);
+        } }, ic('plus', 18), 'Добавить дату'),
+        h('div', { class: 'sheet-pad' }),
+      );
+    },
+  });
+}
+
+export function openEventScheduler() {
+  const presets = S.data().eventPresets || [];
+  openSheet({
+    title: 'Шаблоны событий',
+    left: null,
+    right: { label: 'Закрыть' },
+    build(api) {
+      if (!presets.length) {
+        api.body.append(
+          h('div', { class: 'preset-empty' },
+            h('div', { class: 'preset-empty-icon' }, ic('calendar', 26)),
+            h('b', null, 'Пока нет шаблонов'),
+            h('span', null, 'Откройте событие и нажмите «Сохранить как шаблон». Затем здесь можно будет расставить его по датам и времени.')),
+          h('div', { class: 'sheet-pad' }),
+        );
+        return;
+      }
+      presets.forEach((preset) => {
+        const duration = preset.allDay
+          ? Math.max(1, Number(preset.durationDays) || 1) + ' дн. · весь день'
+          : Math.floor((Number(preset.durationMinutes) || 60) / 60) + ' ч ' + ((Number(preset.durationMinutes) || 60) % 60) + ' мин';
+        const card = h('div', { class: 'group event-preset-card' },
+          h('div', { class: 'preset-card-copy' },
+            h('b', null, preset.name || preset.title || 'Событие'),
+            h('span', null, duration)),
+          h('div', { class: 'preset-card-actions' },
+            h('button', { type: 'button', class: 'preset-schedule-btn', onclick: () => {
+              api.close(true);
+              setTimeout(() => scheduleEventPreset(preset), 120);
+            } }, ic('calendar', 16), 'Расставить даты'),
+            h('button', { type: 'button', class: 'preset-remove-btn', 'aria-label': 'Удалить шаблон', onclick: () => {
+              S.remove('eventPresets', preset.id);
+              card.remove();
+              toast('Шаблон удалён');
+            } }, ic('trash', 16))),
+        );
+        api.body.appendChild(card);
+      });
+      api.body.appendChild(h('div', { class: 'sheet-pad' }));
+    },
+  });
+}
+
 export function editEvent(ev, defaults = {}, occDate = null) {
   const isNew = !ev;
   const defaultCalendarId = S.settings().calFilters?.calendarId || DEFAULT_CALENDAR_ID;
@@ -654,11 +818,19 @@ export function editEvent(ev, defaults = {}, occDate = null) {
   return editorShell({
     title: isNew ? 'Новое событие' : 'Событие',
     draft,
-    valid: (d) => (!d.title.trim() ? 'Введите название события' : changedDateIsPast(d.date, originalDate, dateWasChanged) ? 'Нельзя назначить мероприятие на прошедшую дату' : eventRemindersError(d.reminders) || (!d.allDay && d.end && d.start && toMin(d.end) <= toMin(d.start) ? 'Время окончания должно быть позже начала' : null)),
+    valid: (d) => {
+      const endDate = d.endDate || d.date;
+      const invalidEnd = !d.allDay && d.start && d.end
+        && (endDate < d.date || (endDate === d.date && toMin(d.end) <= toMin(d.start)));
+      return !d.title.trim() ? 'Введите название события'
+        : changedDateIsPast(d.date, originalDate, dateWasChanged) ? 'Нельзя назначить мероприятие на прошедшую дату'
+          : eventRemindersError(d.reminders) || (invalidEnd ? 'Окончание должно быть позже начала' : null);
+    },
     onSave: (d) => {
       const out = { ...d, title: d.title.trim(), reminders: (d.reminders || []).map((r) => ({ id: r.id || uid(), amount: Number(r.amount), unit: r.unit })) };
       out.reminderMin = null;
-      if (out.allDay) { out.start = null; out.end = null; if (out.endDate && out.endDate <= out.date) out.endDate = null; } else out.endDate = null;
+      if (out.allDay) { out.start = null; out.end = null; if (out.endDate && out.endDate < out.date) out.endDate = null; }
+      else if (out.endDate && out.endDate <= out.date) out.endDate = null;
       if (out.repeat.freq === 'none') out.repeat = { freq: 'none' };
       else if (out.repeat.freq !== 'weekly') out.repeat = { freq: out.repeat.freq, interval: out.repeat.interval || 1, until: out.repeat.until || null };
       S.upsert('events', out);
@@ -684,7 +856,7 @@ export function editEvent(ev, defaults = {}, occDate = null) {
         ],
       });
     },
-    draw(body, d, redraw) {
+    draw(body, d, redraw, api) {
       const r = d.repeat;
       const eventCalendarControl = selectInput(calendarOptions(S.data().calendars), d.calendarId || DEFAULT_CALENDAR_ID, (v) => {
         d.calendarId = v;
@@ -694,6 +866,10 @@ export function editEvent(ev, defaults = {}, occDate = null) {
         redraw();
       });
       const endTimeControl = timeInput(d.end, (v) => (d.end = v), { clearable: false });
+      const eventEndDateControl = dateInput(d.endDate && d.endDate > d.date ? d.endDate : d.date, (v) => {
+        const nextDate = v || d.date;
+        d.endDate = nextDate > d.date ? nextDate : null;
+      }, { clearable: false, min: d.date });
       const eventDateControl = dateInput(d.date, (v) => {
         const nextDate = v || todayStr();
         if (changedDateIsPast(nextDate, originalDate, true)) {
@@ -703,6 +879,14 @@ export function editEvent(ev, defaults = {}, occDate = null) {
         }
         dateWasChanged = true;
         d.date = nextDate;
+        const endField = eventEndDateControl.querySelector('input');
+        if (endField) {
+          endField.min = nextDate;
+          if (!d.endDate || d.endDate < nextDate) {
+            d.endDate = null;
+            endField.value = nextDate;
+          }
+        }
       }, { clearable: false, min: todayStr() });
       body.append(
         group(h('div', { class: 'row solo' }, textInput({ value: d.title, placeholder: 'Название', big: true, onInput: (v) => (d.title = v), autofocus: isNew })),
@@ -710,7 +894,8 @@ export function editEvent(ev, defaults = {}, occDate = null) {
         group(
           row('Весь день', toggle(d.allDay, (v) => { d.allDay = v; redraw(); }), { icon: 'sun', iconColor: 'orange' }),
           row(d.allDay ? 'Начало' : 'Дата', eventDateControl, { icon: 'calendar', iconColor: 'red' }),
-          d.allDay ? row('Конец', dateInput(d.endDate, (v) => (d.endDate = v)), { icon: 'calendar', iconColor: 'red' }) : null,
+          d.allDay ? row('Конец', eventEndDateControl, { icon: 'calendar', iconColor: 'red' }) : null,
+          !d.allDay ? row('Дата окончания', eventEndDateControl, { icon: 'calendar', iconColor: 'red' }) : null,
           !d.allDay ? row('Начало', timeInput(d.start, (v) => { d.start = v; if (v && (!d.end || toMin(d.end) <= toMin(v))) { d.end = fromMin(Math.min(1439, toMin(v) + 60)); endTimeControl.querySelector('input').value = d.end; } }, { clearable: false }), { icon: 'clock', iconColor: 'blue' }) : null,
           !d.allDay ? row('Конец', endTimeControl, { icon: 'clock', iconColor: 'blue' }) : null),
         groupTitle('Календарь'),
@@ -728,6 +913,25 @@ export function editEvent(ev, defaults = {}, occDate = null) {
         groupTitle('Цвет'),
         group(h('div', { class: 'row' }, colorPicker(d.color, (v) => { d.color = v; d.colorOverride = true; }))),
         group(h('div', { class: 'row solo' }, textInput({ value: d.notes, placeholder: 'Заметки', multiline: true, onInput: (v) => (d.notes = v) }))),
+        group(
+          h('button', { type: 'button', class: 'row-btn', onclick: () => saveEventPreset(d) }, 'Сохранить как шаблон'),
+          !isNew ? h('button', { type: 'button', class: 'row-btn', onclick: () => {
+            const sourceDate = occDate || d.date;
+            const spanDays = d.endDate && d.endDate > d.date ? eventDateDiff(d.date, d.endDate) : 0;
+            const targetDate = addDays(sourceDate, 1);
+            const copy = {
+              ...d,
+              date: targetDate,
+              endDate: spanDays ? addDays(targetDate, spanDays) : null,
+              repeat: { freq: 'none' },
+              reminders: (d.reminders || []).map((reminder) => ({ ...reminder, id: uid() })),
+            };
+            delete copy.id; delete copy.createdAt; delete copy.updatedAt; delete copy.deleted;
+            delete copy.icsUid; delete copy.exdates;
+            api.close(true);
+            setTimeout(() => editEvent(null, copy), 120);
+          } }, 'Дублировать событие') : null,
+        ),
       );
     },
   });
@@ -783,19 +987,46 @@ export function editHabit(habit, defaults = {}) {
     },
     draw(body, d, redraw, api) {
       const s = d.schedule;
+      const markingGroup = group();
+      const scheduleGroup = group();
+      const renderMarking = () => {
+        clear(markingGroup);
+        markingGroup.append(
+          h('div', { class: 'row' }, seg({
+            options: [{ v: 'check', label: 'Да / нет' }, { v: 'count', label: 'Счётчик' }, { v: 'timer', label: 'Таймер' }],
+            value: d.type,
+            onChange: (v) => {
+              d.type = v;
+              if (v !== 'check' && (!d.target || d.target < 1)) d.target = v === 'timer' ? 10 : 8;
+              if (v === 'timer') d.unit = 'мин';
+              renderMarking();
+            },
+          })),
+          d.type !== 'check' ? row(d.type === 'timer' ? 'Цель, минут' : 'Цель в день', numberInput(d.target, (v) => (d.target = v || 1), { width: '90px' })) : null,
+          d.type === 'count' ? row('Единица', textInput({ value: d.unit, placeholder: 'стаканов, страниц…', onInput: (v) => (d.unit = v) })) : null,
+        );
+      };
+      const renderSchedule = () => {
+        clear(scheduleGroup);
+        scheduleGroup.append(
+          h('div', { class: 'row' }, seg({
+            options: [{ v: 'daily', label: 'Каждый день' }, { v: 'days', label: 'По дням' }, { v: 'weekly', label: 'N в неделю' }],
+            value: s.type,
+            onChange: (v) => { s.type = v; renderSchedule(); },
+          })),
+          s.type === 'days' ? h('div', { class: 'row' }, pills({ multi: true, options: WEEK_ORDER.map((n) => ({ v: n, label: WD_SHORT[n] })), value: s.days || [], onChange: (v) => (s.days = v) })) : null,
+          s.type === 'weekly' ? row('Раз в неделю', stepper(s.perWeek || 3, (v) => (s.perWeek = v), { min: 1, max: 7 })) : null,
+        );
+      };
+      renderMarking();
+      renderSchedule();
       body.append(
         group(h('div', { class: 'row solo' }, textInput({ value: d.title, placeholder: 'Название привычки', big: true, onInput: (v) => (d.title = v), autofocus: isNew }))),
         group(h('div', { class: 'row col' }, emojiPicker(d.emoji, (v) => (d.emoji = v))), h('div', { class: 'row' }, colorPicker(d.color, (v) => (d.color = v)))),
         groupTitle('Как отмечать'),
-        group(
-          h('div', { class: 'row' }, seg({ options: [{ v: 'check', label: 'Да / нет' }, { v: 'count', label: 'Счётчик' }, { v: 'timer', label: 'Таймер' }], value: d.type, onChange: (v) => { d.type = v; if (v !== 'check' && (!d.target || d.target < 1)) d.target = v === 'timer' ? 10 : 8; if (v === 'timer') d.unit = 'мин'; redraw(); } })),
-          d.type !== 'check' ? row(d.type === 'timer' ? 'Цель, минут' : 'Цель в день', numberInput(d.target, (v) => (d.target = v || 1), { width: '90px' })) : null,
-          d.type === 'count' ? row('Единица', textInput({ value: d.unit, placeholder: 'стаканов, страниц…', onInput: (v) => (d.unit = v) })) : null),
+        markingGroup,
         groupTitle('Расписание'),
-        group(
-          h('div', { class: 'row' }, seg({ options: [{ v: 'daily', label: 'Каждый день' }, { v: 'days', label: 'По дням' }, { v: 'weekly', label: 'N в неделю' }], value: s.type, onChange: (v) => { s.type = v; redraw(); } })),
-          s.type === 'days' ? h('div', { class: 'row' }, pills({ multi: true, options: WEEK_ORDER.map((n) => ({ v: n, label: WD_SHORT[n] })), value: s.days || [], onChange: (v) => (s.days = v) })) : null,
-          s.type === 'weekly' ? row('Раз в неделю', stepper(s.perWeek || 3, (v) => (s.perWeek = v), { min: 1, max: 7 })) : null),
+        scheduleGroup,
         groupTitle('Напоминание и цель'),
         group(
           row('Время', timeInput(d.time, (v) => { d.time = v; }), { icon: 'clock', iconColor: 'blue' }),
@@ -926,6 +1157,10 @@ export function quickAdd({ date = null } = {}) {
           tile('calendar', 'red', 'Событие', 'встреча, поездка, повтор', () => editEvent(null, date ? { date } : {})),
           tile('flame', 'orange', 'Привычка', 'ежедневная или по расписанию', () => editHabit(null)),
           tile('target', 'green', 'Цель', 'с подцелями и прогрессом', () => editGoal(null))),
+        h('button', { type: 'button', class: 'link-btn event-schedule-link', onclick: () => {
+          api.close(true);
+          setTimeout(openEventScheduler, 120);
+        } }, 'Шаблоны событий и планирование'),
         h('div', { class: 'sheet-pad' }));
       setTimeout(() => input.focus(), 450);
     },
