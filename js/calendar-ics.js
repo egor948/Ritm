@@ -356,20 +356,28 @@ export function parseCalendarICS(text) {
         }
       }
     } else if (parsedEnd) {
-      if (parsedEnd.date !== start.date) {
-        warnings.push('Событие «' + summary + '» длится дольше одного календарного дня; в Ritm оно отображается до конца даты начала.');
-        end = '23:59';
-      } else end = parsedEnd.time;
+      if (parsedEnd.allDay) {
+        warnings.push('Окончание события «' + summary + '» указано без времени и было проигнорировано.');
+      } else {
+        if (parsedEnd.date !== start.date) endDate = parsedEnd.date;
+        end = parsedEnd.time;
+      }
     }
     if (!allDay && !end) {
       const durationProp = first(props, 'DURATION');
       const duration = durationProp && parseDurationMinutes(durationProp.value);
       const [hh, mm] = start.time.split(':').map(Number);
-      const endMinutes = Math.min(1439, hh * 60 + mm + (duration > 0 ? duration : 60));
+      const total = hh * 60 + mm + (duration > 0 ? duration : 60);
+      const dayOffset = Math.floor(total / 1440);
+      const endMinutes = total % 1440;
       end = String(Math.floor(endMinutes / 60)).padStart(2, '0') + ':' + String(endMinutes % 60).padStart(2, '0');
+      if (dayOffset) endDate = addDays(start.date, dayOffset);
     }
-    if (!allDay && end <= start.time) {
+    if (!allDay && (!end || (endDate
+      ? endDate < start.date || (endDate === start.date && end <= start.time)
+      : end <= start.time))) {
       warnings.push('Время окончания события «' + summary + '» скорректировано, чтобы оно было позже начала.');
+      endDate = null;
       const [hh, mm] = start.time.split(':').map(Number);
       const m = Math.min(1439, hh * 60 + mm + 30);
       end = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
@@ -377,9 +385,6 @@ export function parseCalendarICS(text) {
     let repeat = { freq: 'none' };
     const ruleProp = first(props, 'RRULE');
     if (ruleProp && !isException) repeat = parseRule(ruleProp.value, start.date, warnings, summary);
-    if (allDay && endDate && repeat.freq !== 'none') {
-      warnings.push('Многодневное повторяющееся событие «' + summary + '» в Ritm будет отображаться только в дату начала каждого повтора.');
-    }
     const exdates = [];
     for (const prop of all(props, 'EXDATE')) {
       for (const value of prop.value.split(',')) {
@@ -530,7 +535,7 @@ export function buildCalendarICS(calendar, events) {
       lines.push('DTEND;VALUE=DATE:' + icsDate(addDays(event.endDate || event.date, 1)));
     } else {
       lines.push('DTSTART:' + icsDateTime(event.date, event.start || '09:00'));
-      lines.push('DTEND:' + icsDateTime(event.date, event.end || event.start || '10:00'));
+      lines.push('DTEND:' + icsDateTime(event.endDate || event.date, event.end || event.start || '10:00'));
     }
     lines.push(foldCalendarLine('SUMMARY', escapeText(event.title || 'Без названия')));
     if (event.location) lines.push(foldCalendarLine('LOCATION', escapeText(event.location)));
